@@ -23,23 +23,29 @@ class TranscriberWorker(QThread):
         audio_queue: queue.Queue,
         model_size: str = "base",
         language: str = "en",
+        engine: TranscriptionEngine | None = None,
     ):
         super().__init__()
         self.audio_queue = audio_queue
         self.model_size = model_size
         self.language = language
+        self._engine = engine
         self._stop = False
 
     def run(self):
-        try:
-            engine = TranscriptionEngine(
-                model_size=self.model_size,
-                language=self.language,
-            )
+        if self._engine is not None:
+            engine = self._engine
             self.model_loaded.emit()
-        except Exception as e:
-            self.error_occurred.emit(f"Failed to load model: {e}")
-            return
+        else:
+            try:
+                engine = TranscriptionEngine(
+                    model_size=self.model_size,
+                    language=self.language,
+                )
+                self.model_loaded.emit()
+            except Exception as e:
+                self.error_occurred.emit(f"Failed to load model: {e}")
+                return
 
         while not self._stop:
             try:

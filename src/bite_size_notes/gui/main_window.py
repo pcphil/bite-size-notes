@@ -3,7 +3,7 @@
 import queue
 import time
 
-from PySide6.QtCore import QTimer, Qt
+from PySide6.QtCore import QThread, QTimer, Qt, Signal
 from PySide6.QtGui import QAction, QFont, QKeySequence
 from PySide6.QtWidgets import (
     QLabel,
@@ -21,9 +21,33 @@ from bite_size_notes.gui.export_dialog import export_transcript
 from bite_size_notes.gui.settings_dialog import SettingsDialog
 from bite_size_notes.gui.transcript_view import TranscriptView
 from bite_size_notes.models.transcript import TranscriptSegment, TranscriptSession
+from bite_size_notes.transcription.engine import TranscriptionEngine
+from bite_size_notes.transcription.model_utils import is_model_cached
 from bite_size_notes.transcription.worker import TranscriberWorker
 from bite_size_notes.utils.config import AppConfig
 from bite_size_notes.utils.platform import is_macos
+
+
+class _ModelPreloadThread(QThread):
+    """Background thread that loads a TranscriptionEngine into memory."""
+
+    loaded = Signal(object)  # emits the TranscriptionEngine instance
+    error = Signal(str)
+
+    def __init__(self, model_size: str, language: str, parent=None):
+        super().__init__(parent)
+        self._model_size = model_size
+        self._language = language
+
+    def run(self):
+        try:
+            engine = TranscriptionEngine(
+                model_size=self._model_size,
+                language=self._language,
+            )
+            self.loaded.emit(engine)
+        except Exception as exc:
+            self.error.emit(str(exc))
 
 
 class MainWindow(QMainWindow):
@@ -41,10 +65,17 @@ class MainWindow(QMainWindow):
         self.is_recording = False
         self._record_start_time = 0.0
 
+        self._preloaded_engine: TranscriptionEngine | None = None
+        self._preload_thread: _ModelPreloadThread | None = None
+
         self._setup_ui()
         self._setup_toolbar()
         self._setup_status_bar()
         self._setup_timers()
+
+        # Preload the model on startup if it's already downloaded
+        if is_model_cached(self.config.model_size):
+            self._preload_model()
 
     def _setup_ui(self):
         central = QWidget()
@@ -52,6 +83,8 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
 
         self.transcript_view = TranscriptView()
+        self.transcript_view.text_edited.connect(self._on_bubble_text_edited)
+        self.transcript_view.delete_requested.connect(self._on_bubble_deleted)
         layout.addWidget(self.transcript_view)
 
         self.setCentralWidget(central)
@@ -123,6 +156,31 @@ class MainWindow(QMainWindow):
         self.ui_timer.timeout.connect(self._update_ui)
         self.ui_timer.setInterval(200)
 
+    # --- Model preloading ---
+
+    def _preload_model(self):
+        """Start loading the Whisper model in a background thread."""
+        self._preloaded_engine = None
+        self._preload_thread = _ModelPreloadThread(
+            model_size=self.config.model_size,
+            language=self.config.language,
+            parent=self,
+        )
+        self._preload_thread.loaded.connect(self._on_model_preloaded)
+        self._preload_thread.error.connect(self._on_preload_error)
+        self.status_label.setText("Loading model...")
+        self._preload_thread.start()
+
+    def _on_model_preloaded(self, engine):
+        self._preloaded_engine = engine
+        self._preload_thread = None
+        if not self.is_recording:
+            self.status_label.setText("Ready")
+
+    def _on_preload_error(self, message: str):
+        self._preload_thread = None
+        self.status_label.setText(f"Model load failed: {message}")
+
     # --- Actions ---
 
     def _on_record_clicked(self):
@@ -132,6 +190,34 @@ class MainWindow(QMainWindow):
             self._start_recording()
 
     def _start_recording(self):
+        # Check model readiness
+        if self._preloaded_engine is None:
+            if self._preload_thread is not None:
+                QMessageBox.information(
+                    self,
+                    "Model Loading",
+                    "The Whisper model is still loading. Please wait a moment.",
+                )
+                return
+            if not is_model_cached(self.config.model_size):
+                QMessageBox.warning(
+                    self,
+                    "Model Not Downloaded",
+                    f"The '{self.config.model_size}' Whisper model is not downloaded yet.\n\n"
+                    "Please open Settings and click 'Download Model' first.",
+                )
+                return
+            # Model is cached but not preloaded (e.g. preload failed) — start preload
+            self._preload_model()
+            QMessageBox.information(
+                self,
+                "Model Loading",
+                "The Whisper model is loading. Please try again in a moment.",
+            )
+            return
+
+        self.transcript_view.set_editable(False)
+
         # Resolve devices
         mic_device = self.config.mic_device
         if mic_device == -1:
@@ -167,17 +253,20 @@ class MainWindow(QMainWindow):
             except queue.Empty:
                 break
 
-        # Start transcription worker first (so it's ready for chunks)
+        # Consume preloaded engine and pass to worker
+        engine = self._preloaded_engine
+        self._preloaded_engine = None
+
         self.transcriber_worker = TranscriberWorker(
             audio_queue=self.audio_queue,
             model_size=self.config.model_size,
             language=self.config.language,
+            engine=engine,
         )
         self.transcriber_worker.transcription_ready.connect(self._on_transcription)
         self.transcriber_worker.model_loaded.connect(self._on_model_loaded)
         self.transcriber_worker.error_occurred.connect(self._on_error)
 
-        self.status_label.setText("Loading Whisper model...")
         self.transcriber_worker.start()
 
         # Start audio capture
@@ -208,7 +297,8 @@ class MainWindow(QMainWindow):
 
         self.is_recording = False
         self.record_action.setText("Record")
-        self.status_label.setText("Stopped")
+        self.status_label.setText("Stopped — click any bubble to edit")
+        self.transcript_view.set_editable(True)
         self.duration_label.setText("")
         self.mic_level.setValue(0)
         self.loopback_level.setValue(0)
@@ -237,14 +327,33 @@ class MainWindow(QMainWindow):
         self.transcript_session.clear()
         self.transcript_view.clear_transcript()
 
+    def _on_bubble_text_edited(self, index: int, new_text: str):
+        """Sync an edited bubble's text back to the transcript session."""
+        if 0 <= index < len(self.transcript_session.segments):
+            self.transcript_session.segments[index].text = new_text
+
+    def _on_bubble_deleted(self, index: int):
+        """Remove a segment from the transcript session."""
+        if 0 <= index < len(self.transcript_session.segments):
+            self.transcript_session.segments.pop(index)
+
     def _on_settings_clicked(self):
         if self.is_recording:
             QMessageBox.information(
                 self, "Settings", "Stop recording before changing settings."
             )
             return
+
+        old_model = self.config.model_size
+        old_language = self.config.language
         dialog = SettingsDialog(self.config, self)
-        dialog.exec()
+        if dialog.exec() == SettingsDialog.DialogCode.Accepted:
+            if self.config.model_size != old_model or self.config.language != old_language:
+                self._preloaded_engine = None
+                if is_model_cached(self.config.model_size):
+                    self._preload_model()
+                else:
+                    self.status_label.setText("Model not downloaded")
 
     def _update_ui(self):
         """Periodic UI update for duration and audio levels."""

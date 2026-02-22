@@ -1,65 +1,86 @@
-"""Live transcript display widget."""
+"""Live transcript display as a scrollable list of chat bubbles."""
 
-from PySide6.QtGui import QColor, QFont, QTextCharFormat, QTextCursor
-from PySide6.QtWidgets import QTextEdit
+from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtWidgets import QScrollArea, QSizePolicy, QVBoxLayout, QWidget
 
+from bite_size_notes.gui.chat_bubble import ChatBubbleWidget
 from bite_size_notes.models.transcript import TranscriptSegment
 
-SOURCE_COLORS = {
-    "Me": QColor("#2196F3"),  # Blue
-    "Others": QColor("#4CAF50"),  # Green
-    "mic": QColor("#2196F3"),
-    "loopback": QColor("#4CAF50"),
-}
 
-TIMESTAMP_COLOR = QColor("#9E9E9E")  # Grey
+class TranscriptView(QScrollArea):
+    """Scrollable container of chat-bubble widgets, one per transcript segment."""
 
-
-class TranscriptView(QTextEdit):
-    """Read-only text widget that displays color-coded transcript segments."""
+    text_edited = Signal(int, str)  # (segment_index, new_text)
+    delete_requested = Signal(int)  # segment_index
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setReadOnly(True)
-        self.setFont(QFont("Segoe UI", 11))
-        self.setStyleSheet(
-            """
-            QTextEdit {
+        self.setWidgetResizable(True)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setStyleSheet("""
+            QScrollArea {
                 background-color: #1e1e1e;
-                color: #d4d4d4;
                 border: none;
-                padding: 8px;
             }
-        """
-        )
+        """)
+
+        self._container = QWidget()
+        self._container.setStyleSheet("background-color: #1e1e1e;")
+        self._layout = QVBoxLayout(self._container)
+        self._layout.setContentsMargins(0, 8, 0, 8)
+        self._layout.setSpacing(4)
+        self._layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self._layout.addStretch()
+
+        self.setWidget(self._container)
+
+        self._bubbles: list[ChatBubbleWidget] = []
+        self._editable = False
 
     def append_segment(self, segment: TranscriptSegment):
-        """Append a new transcript segment with formatting."""
-        cursor = self.textCursor()
-        cursor.movePosition(QTextCursor.MoveOperation.End)
+        """Add a new chat bubble for a transcript segment."""
+        bubble = ChatBubbleWidget(
+            segment=segment,
+            segment_index=len(self._bubbles),
+            editable=self._editable,
+        )
+        bubble.text_edited.connect(self.text_edited)
+        bubble.delete_requested.connect(self._on_delete_requested)
 
-        # Timestamp
-        ts_fmt = QTextCharFormat()
-        ts_fmt.setForeground(TIMESTAMP_COLOR)
-        ts_fmt.setFont(QFont("Consolas", 10))
-        cursor.insertText(f"[{segment.time_str}] ", ts_fmt)
+        # Insert before the trailing stretch
+        self._layout.insertWidget(self._layout.count() - 1, bubble)
+        self._bubbles.append(bubble)
 
-        # Speaker label
-        label = segment.speaker_label or segment.source
-        label_fmt = QTextCharFormat()
-        label_fmt.setForeground(SOURCE_COLORS.get(label, QColor("#d4d4d4")))
-        label_fmt.setFontWeight(QFont.Weight.Bold)
-        cursor.insertText(f"{label}: ", label_fmt)
+        # Auto-scroll to bottom
+        QTimer.singleShot(50, self._scroll_to_bottom)
 
-        # Text
-        text_fmt = QTextCharFormat()
-        text_fmt.setForeground(QColor("#d4d4d4"))
-        cursor.insertText(f"{segment.text}\n", text_fmt)
-
-        # Auto-scroll
-        self.setTextCursor(cursor)
-        self.ensureCursorVisible()
+    def set_editable(self, editable: bool):
+        """Toggle edit mode on all bubbles."""
+        self._editable = editable
+        for bubble in self._bubbles:
+            bubble.set_editable(editable)
 
     def clear_transcript(self):
-        """Clear all transcript text."""
-        self.clear()
+        """Remove all chat bubbles."""
+        for bubble in self._bubbles:
+            self._layout.removeWidget(bubble)
+            bubble.deleteLater()
+        self._bubbles.clear()
+
+    def _on_delete_requested(self, index: int):
+        """Remove a bubble and re-index the remaining ones."""
+        if index < 0 or index >= len(self._bubbles):
+            return
+        bubble = self._bubbles.pop(index)
+        self._layout.removeWidget(bubble)
+        bubble.deleteLater()
+
+        # Re-index remaining bubbles so signals carry correct indices
+        for i, b in enumerate(self._bubbles):
+            b._segment_index = i
+
+        self.delete_requested.emit(index)
+
+    def _scroll_to_bottom(self):
+        sb = self.verticalScrollBar()
+        sb.setValue(sb.maximum())
