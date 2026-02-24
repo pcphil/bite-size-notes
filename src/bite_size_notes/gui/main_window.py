@@ -347,7 +347,6 @@ class MainWindow(QMainWindow):
             mic_device_index=mic_device,
             loopback_device_index=loopback_device,
             audio_queue=self.audio_queue,
-            chunk_seconds=self.config.chunk_seconds,
         )
         self.capture_thread.start()
 

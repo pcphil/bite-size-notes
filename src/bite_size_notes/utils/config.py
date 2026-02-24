@@ -47,10 +47,4 @@ class AppConfig:
 
     # --- Recording ---
 
-    @property
-    def chunk_seconds(self) -> float:
-        return float(self.settings.value("recording/chunk_seconds", 5.0))
 
-    @chunk_seconds.setter
-    def chunk_seconds(self, value: float):
-        self.settings.setValue("recording/chunk_seconds", value)

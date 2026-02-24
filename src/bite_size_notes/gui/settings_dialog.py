@@ -10,7 +10,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
-    QSpinBox,
     QVBoxLayout,
 )
 
@@ -116,11 +115,6 @@ class SettingsDialog(QDialog):
             self.lang_combo.addItem(name, code)
         trans_layout.addRow("Language:", self.lang_combo)
 
-        self.chunk_spin = QSpinBox()
-        self.chunk_spin.setRange(3, 30)
-        self.chunk_spin.setSuffix(" seconds")
-        trans_layout.addRow("Chunk Duration:", self.chunk_spin)
-
         trans_group.setLayout(trans_layout)
         layout.addWidget(trans_group)
 
@@ -203,9 +197,6 @@ class SettingsDialog(QDialog):
         if lang_idx >= 0:
             self.lang_combo.setCurrentIndex(lang_idx)
 
-        # Chunk duration
-        self.chunk_spin.setValue(int(self.config.chunk_seconds))
-
         # Initial model status check
         self._update_model_status()
 
@@ -214,5 +205,4 @@ class SettingsDialog(QDialog):
         self.config.loopback_device = self.loopback_combo.currentData()
         self.config.model_size = self.model_combo.currentText()
         self.config.language = self.lang_combo.currentData() or "en"
-        self.config.chunk_seconds = float(self.chunk_spin.value())
         self.accept()

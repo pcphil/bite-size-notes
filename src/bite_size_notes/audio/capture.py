@@ -28,7 +28,7 @@ class AudioCaptureThread(threading.Thread):
     Loopback audio is captured via pyaudiowpatch (WASAPI) on Windows,
     or via sounddevice (BlackHole) on macOS.
 
-    Audio chunks are pushed to the output queue every `chunk_seconds`.
+    Audio chunks are flushed after detecting silence following speech.
     """
 
     SAMPLE_RATE = 16000
@@ -40,13 +40,11 @@ class AudioCaptureThread(threading.Thread):
         mic_device_index: int,
         loopback_device_index: int | None,
         audio_queue: queue.Queue,
-        chunk_seconds: float = 5.0,
     ):
         super().__init__(daemon=True)
         self.mic_device_index = mic_device_index
         self.loopback_device_index = loopback_device_index
         self.audio_queue = audio_queue
-        self.chunk_seconds = chunk_seconds
         self._stop_event = threading.Event()
         self._start_time = 0.0
 
@@ -102,12 +100,12 @@ class AudioCaptureThread(threading.Thread):
 
         # --- Silence-based accumulation loop ---
         SILENCE_THRESHOLD = 0.01  # RMS below this = silence
-        SILENCE_DURATION = 0.8  # seconds of silence before flushing
+        SILENCE_DURATION = 1.0  # seconds of silence before flushing
         POLL_INTERVAL = 0.1  # polling interval in seconds
 
         had_speech = False
         silence_start = None
-        last_flush = time.monotonic()
+        chunk_start = time.monotonic()
 
         while not self._stop_event.is_set():
             self._stop_event.wait(POLL_INTERVAL)
@@ -125,24 +123,16 @@ class AudioCaptureThread(threading.Thread):
             elif had_speech and silence_start is None:
                 silence_start = now
 
-            elapsed = now - last_flush
-
-            # Flush when: speech ended + silence long enough, or max duration reached
+            # Flush only when speech ended + silence long enough
             should_flush = False
             if had_speech and silence_start is not None:
                 if (now - silence_start) >= SILENCE_DURATION:
                     should_flush = True
-            if elapsed >= self.chunk_seconds:
-                should_flush = True
 
             if not should_flush:
                 continue
 
-            # Skip flush if buffer contains only silence
-            if not had_speech:
-                last_flush = now
-                continue
-
+            elapsed = now - chunk_start
             timestamp = now - self._start_time
 
             # Flush mic buffer
@@ -183,7 +173,7 @@ class AudioCaptureThread(threading.Thread):
             # Reset state
             had_speech = False
             silence_start = None
-            last_flush = now
+            chunk_start = now
 
         # Cleanup
         for s in streams:
