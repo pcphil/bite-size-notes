@@ -6,10 +6,14 @@ import time
 from PySide6.QtCore import QThread, QTimer, Qt, Signal
 from PySide6.QtGui import QAction, QFont, QKeySequence
 from PySide6.QtWidgets import (
+    QHBoxLayout,
     QLabel,
+    QLineEdit,
     QMainWindow,
     QMessageBox,
     QProgressBar,
+    QPushButton,
+    QSplitter,
     QToolBar,
     QVBoxLayout,
     QWidget,
@@ -18,7 +22,9 @@ from PySide6.QtWidgets import (
 from bite_size_notes.audio.capture import AudioCaptureThread
 from bite_size_notes.audio.devices import get_default_mic, get_loopback_device
 from bite_size_notes.gui.export_dialog import export_transcript
+from bite_size_notes.gui.notes_panel import NotesPanel
 from bite_size_notes.gui.settings_dialog import SettingsDialog
+from bite_size_notes.gui.sidebar_panel import SidebarPanel
 from bite_size_notes.gui.transcript_view import TranscriptView
 from bite_size_notes.models.transcript import TranscriptSegment, TranscriptSession
 from bite_size_notes.transcription.engine import TranscriptionEngine
@@ -54,7 +60,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Bite-Size Notes")
-        self.setMinimumSize(700, 500)
+        self.setMinimumSize(900, 500)
 
         self.config = AppConfig()
         self.audio_queue: queue.Queue = queue.Queue(maxsize=100)
@@ -79,13 +85,80 @@ class MainWindow(QMainWindow):
 
     def _setup_ui(self):
         central = QWidget()
+        central.setStyleSheet("background-color: #1e1e1e;")
         layout = QVBoxLayout(central)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
+        # --- Three-panel splitter ---
+        self._splitter = QSplitter(Qt.Orientation.Horizontal)
+        self._splitter.setStyleSheet("""
+            QSplitter::handle {
+                background-color: #333;
+                width: 1px;
+            }
+        """)
+
+        # Left: sidebar
+        self.sidebar = SidebarPanel()
+        self.sidebar.settings_requested.connect(self._on_settings_clicked)
+        self._splitter.addWidget(self.sidebar)
+
+        # Center: transcript
         self.transcript_view = TranscriptView()
         self.transcript_view.text_edited.connect(self._on_bubble_text_edited)
         self.transcript_view.delete_requested.connect(self._on_bubble_deleted)
-        layout.addWidget(self.transcript_view)
+        self._splitter.addWidget(self.transcript_view)
+
+        # Right: notes
+        self.notes_panel = NotesPanel()
+        self._splitter.addWidget(self.notes_panel)
+
+        # Set initial sizes (sidebar 220, transcript stretches, notes 250)
+        self._splitter.setSizes([220, 500, 250])
+        self._splitter.setStretchFactor(0, 0)
+        self._splitter.setStretchFactor(1, 1)
+        self._splitter.setStretchFactor(2, 0)
+
+        layout.addWidget(self._splitter, 1)
+
+        # --- Bottom chat bar (placeholder) ---
+        chat_bar = QWidget()
+        chat_bar.setStyleSheet("background-color: #252526; border-top: 1px solid #333;")
+        chat_layout = QHBoxLayout(chat_bar)
+        chat_layout.setContentsMargins(8, 6, 8, 6)
+        chat_layout.setSpacing(8)
+
+        self._chat_input = QLineEdit()
+        self._chat_input.setPlaceholderText("Chat input coming soon...")
+        self._chat_input.setEnabled(False)
+        self._chat_input.setStyleSheet("""
+            QLineEdit {
+                background-color: #1e1e1e;
+                color: #d4d4d4;
+                border: 1px solid #333;
+                border-radius: 6px;
+                padding: 8px;
+                font-size: 13px;
+            }
+        """)
+        chat_layout.addWidget(self._chat_input)
+
+        send_btn = QPushButton("Send")
+        send_btn.setEnabled(False)
+        send_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #333;
+                color: #888;
+                border: 1px solid #555;
+                border-radius: 6px;
+                padding: 8px 16px;
+                font-size: 13px;
+            }
+        """)
+        chat_layout.addWidget(send_btn)
+
+        layout.addWidget(chat_bar)
 
         self.setCentralWidget(central)
 
@@ -118,12 +191,12 @@ class MainWindow(QMainWindow):
 
         toolbar.addSeparator()
 
-        # Settings button
-        settings_action = QAction("Settings", self)
-        settings_action.setShortcut(QKeySequence("Ctrl+,"))
-        settings_action.setToolTip("Open settings (Ctrl+,)")
-        settings_action.triggered.connect(self._on_settings_clicked)
-        toolbar.addAction(settings_action)
+        # Toggle sidebar
+        toggle_sidebar_action = QAction("Sidebar", self)
+        toggle_sidebar_action.setShortcut(QKeySequence("Ctrl+B"))
+        toggle_sidebar_action.setToolTip("Toggle sidebar (Ctrl+B)")
+        toggle_sidebar_action.triggered.connect(self._toggle_sidebar)
+        toolbar.addAction(toggle_sidebar_action)
 
     def _setup_status_bar(self):
         self.status_label = QLabel("Ready")
@@ -326,6 +399,7 @@ class MainWindow(QMainWindow):
     def _on_clear_clicked(self):
         self.transcript_session.clear()
         self.transcript_view.clear_transcript()
+        self.notes_panel.clear()
 
     def _on_bubble_text_edited(self, index: int, new_text: str):
         """Sync an edited bubble's text back to the transcript session."""
@@ -336,6 +410,9 @@ class MainWindow(QMainWindow):
         """Remove a segment from the transcript session."""
         if 0 <= index < len(self.transcript_session.segments):
             self.transcript_session.segments.pop(index)
+
+    def _toggle_sidebar(self):
+        self.sidebar.setVisible(not self.sidebar.isVisible())
 
     def _on_settings_clicked(self):
         if self.is_recording:
