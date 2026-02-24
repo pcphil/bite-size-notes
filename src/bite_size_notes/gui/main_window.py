@@ -4,15 +4,12 @@ import queue
 import time
 
 from PySide6.QtCore import QThread, QTimer, Qt, Signal
-from PySide6.QtGui import QAction, QFont, QKeySequence
+from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
-    QHBoxLayout,
     QLabel,
-    QLineEdit,
     QMainWindow,
     QMessageBox,
     QProgressBar,
-    QPushButton,
     QSplitter,
     QToolBar,
     QVBoxLayout,
@@ -23,6 +20,7 @@ from bite_size_notes.audio.capture import AudioCaptureThread
 from bite_size_notes.audio.devices import get_default_mic, get_loopback_device
 from bite_size_notes.gui.export_dialog import export_transcript
 from bite_size_notes.gui.notes_panel import NotesPanel
+from bite_size_notes.gui.output_panel import OutputPanel
 from bite_size_notes.gui.settings_dialog import SettingsDialog
 from bite_size_notes.gui.sidebar_panel import SidebarPanel
 from bite_size_notes.gui.transcript_view import TranscriptView
@@ -110,57 +108,31 @@ class MainWindow(QMainWindow):
         self.transcript_view.delete_requested.connect(self._on_bubble_deleted)
         self._splitter.addWidget(self.transcript_view)
 
-        # Right: notes
-        self.notes_panel = NotesPanel()
-        self._splitter.addWidget(self.notes_panel)
+        # Right: output
+        self.output_panel = OutputPanel()
+        self._splitter.addWidget(self.output_panel)
 
-        # Set initial sizes (sidebar 220, transcript stretches, notes 250)
-        self._splitter.setSizes([220, 500, 250])
+        # Set initial sizes (sidebar 220, transcript stretches, output 350)
+        self._splitter.setSizes([220, 400, 350])
         self._splitter.setStretchFactor(0, 0)
         self._splitter.setStretchFactor(1, 1)
         self._splitter.setStretchFactor(2, 0)
 
         layout.addWidget(self._splitter, 1)
 
-        # --- Bottom chat bar (placeholder) ---
-        chat_bar = QWidget()
-        chat_bar.setStyleSheet("background-color: #252526; border-top: 1px solid #333;")
-        chat_layout = QHBoxLayout(chat_bar)
-        chat_layout.setContentsMargins(8, 6, 8, 6)
-        chat_layout.setSpacing(8)
+        # Connect sidebar collapse to redistribute splitter space
+        self._saved_splitter_sizes = self._splitter.sizes()
+        self.sidebar.collapse_toggled.connect(self._on_sidebar_collapse_toggled)
 
-        self._chat_input = QLineEdit()
-        self._chat_input.setPlaceholderText("Chat input coming soon...")
-        self._chat_input.setEnabled(False)
-        self._chat_input.setStyleSheet("""
-            QLineEdit {
-                background-color: #1e1e1e;
-                color: #d4d4d4;
-                border: 1px solid #333;
-                border-radius: 6px;
-                padding: 8px;
-                font-size: 13px;
-            }
-        """)
-        chat_layout.addWidget(self._chat_input)
-
-        send_btn = QPushButton("Send")
-        send_btn.setEnabled(False)
-        send_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #333;
-                color: #888;
-                border: 1px solid #555;
-                border-radius: 6px;
-                padding: 8px 16px;
-                font-size: 13px;
-            }
-        """)
-        chat_layout.addWidget(send_btn)
-
-        layout.addWidget(chat_bar)
+        # Connect output panel signals
+        self.output_panel.notes_toggled.connect(self._toggle_notes)
+        self.output_panel.export_clicked.connect(self._on_export_clicked)
 
         self.setCentralWidget(central)
+
+        # --- Floating notes panel (parented to central widget, positioned later) ---
+        self.notes_panel = NotesPanel(central)
+        self.notes_panel.close_requested.connect(self._toggle_notes)
 
     def _setup_toolbar(self):
         toolbar = QToolBar("Main")
@@ -177,13 +149,6 @@ class MainWindow(QMainWindow):
 
         toolbar.addSeparator()
 
-        # Export button
-        export_action = QAction("Export", self)
-        export_action.setShortcut(QKeySequence("Ctrl+E"))
-        export_action.setToolTip("Export transcript (Ctrl+E)")
-        export_action.triggered.connect(self._on_export_clicked)
-        toolbar.addAction(export_action)
-
         # Clear button
         clear_action = QAction("Clear", self)
         clear_action.triggered.connect(self._on_clear_clicked)
@@ -191,15 +156,8 @@ class MainWindow(QMainWindow):
 
         toolbar.addSeparator()
 
-        # Toggle sidebar
-        toggle_sidebar_action = QAction("Sidebar", self)
-        toggle_sidebar_action.setShortcut(QKeySequence("Ctrl+B"))
-        toggle_sidebar_action.setToolTip("Toggle sidebar (Ctrl+B)")
-        toggle_sidebar_action.triggered.connect(self._toggle_sidebar)
-        toolbar.addAction(toggle_sidebar_action)
-
     def _setup_status_bar(self):
-        self.status_label = QLabel("Ready")
+        self.status_label = QLabel("Ready for Recording")
         self.statusBar().addWidget(self.status_label, 1)
 
         self.duration_label = QLabel("")
@@ -241,7 +199,7 @@ class MainWindow(QMainWindow):
         )
         self._preload_thread.loaded.connect(self._on_model_preloaded)
         self._preload_thread.error.connect(self._on_preload_error)
-        self.status_label.setText("Loading model...")
+        self.status_label.setText("Loading transcriber...")
         self._preload_thread.start()
 
     def _on_model_preloaded(self, engine):
@@ -410,8 +368,39 @@ class MainWindow(QMainWindow):
         if 0 <= index < len(self.transcript_session.segments):
             self.transcript_session.segments.pop(index)
 
-    def _toggle_sidebar(self):
-        self.sidebar.setVisible(not self.sidebar.isVisible())
+    def _toggle_notes(self):
+        if self.notes_panel.isVisible():
+            self.notes_panel.hide()
+        else:
+            self._position_notes_panel()
+            self.notes_panel.show()
+            self.notes_panel.raise_()
+
+    def _on_sidebar_collapse_toggled(self, collapsed: bool):
+        """Redistribute splitter space when the sidebar collapses/expands."""
+        sizes = self._splitter.sizes()
+        total = sum(sizes)
+        if collapsed:
+            self._saved_splitter_sizes = sizes
+            self._splitter.setSizes([40, total - 40 - sizes[2], sizes[2]])
+        else:
+            # Restore previous proportions
+            self._splitter.setSizes(self._saved_splitter_sizes)
+
+    def _position_notes_panel(self):
+        """Anchor the notes panel at the bottom-right of the central widget."""
+        central = self.centralWidget()
+        if central is None:
+            return
+        margin = 12
+        x = central.width() - self.notes_panel.width() - margin
+        y = central.height() - self.notes_panel.height() - margin
+        self.notes_panel.move(max(x, 0), max(y, 0))
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if self.notes_panel.isVisible():
+            self._position_notes_panel()
 
     def _on_settings_clicked(self):
         if self.is_recording:

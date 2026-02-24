@@ -12,14 +12,30 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+_SMALL_BTN_STYLE = """
+    QPushButton {
+        background-color: #333;
+        color: #d4d4d4;
+        border: 1px solid #555;
+        border-radius: 4px;
+        font-size: 16px;
+        font-weight: bold;
+    }
+    QPushButton:hover {
+        background-color: #444;
+    }
+"""
+
 
 class SidebarPanel(QWidget):
     """Collapsible left panel showing session history and settings access."""
 
     settings_requested = Signal()
+    collapse_toggled = Signal(bool)  # emits True when collapsed
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self._collapsed = False
         self.setMinimumWidth(180)
         self._setup_ui()
 
@@ -28,33 +44,28 @@ class SidebarPanel(QWidget):
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(8)
 
-        # --- Sessions header + new button ---
+        # --- Sessions header + collapse/new buttons ---
         header_row = QHBoxLayout()
         header_row.setContentsMargins(0, 0, 0, 0)
 
-        sessions_label = QLabel("Sessions")
-        sessions_label.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
-        sessions_label.setStyleSheet("color: #d4d4d4; background: transparent;")
-        header_row.addWidget(sessions_label)
+        self._sessions_label = QLabel("Sessions")
+        self._sessions_label.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
+        self._sessions_label.setStyleSheet("color: #d4d4d4; background: transparent;")
+        header_row.addWidget(self._sessions_label)
         header_row.addStretch()
 
-        new_btn = QPushButton("+")
-        new_btn.setFixedSize(28, 28)
-        new_btn.setToolTip("New session")
-        new_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #333;
-                color: #d4d4d4;
-                border: 1px solid #555;
-                border-radius: 4px;
-                font-size: 16px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #444;
-            }
-        """)
-        header_row.addWidget(new_btn)
+        self._new_btn = QPushButton("+")
+        self._new_btn.setFixedSize(28, 28)
+        self._new_btn.setToolTip("New session")
+        self._new_btn.setStyleSheet(_SMALL_BTN_STYLE)
+        header_row.addWidget(self._new_btn)
+
+        self._collapse_btn = QPushButton("\u00ab")
+        self._collapse_btn.setFixedSize(28, 28)
+        self._collapse_btn.setToolTip("Collapse sidebar")
+        self._collapse_btn.setStyleSheet(_SMALL_BTN_STYLE)
+        self._collapse_btn.clicked.connect(self.toggle_collapse)
+        header_row.addWidget(self._collapse_btn)
 
         layout.addLayout(header_row)
 
@@ -91,8 +102,8 @@ class SidebarPanel(QWidget):
         layout.addWidget(self._session_list, 1)
 
         # --- Settings button ---
-        settings_btn = QPushButton("Settings")
-        settings_btn.setStyleSheet("""
+        self._settings_btn = QPushButton("Settings")
+        self._settings_btn.setStyleSheet("""
             QPushButton {
                 background-color: #333;
                 color: #d4d4d4;
@@ -105,8 +116,8 @@ class SidebarPanel(QWidget):
                 background-color: #444;
             }
         """)
-        settings_btn.clicked.connect(self.settings_requested.emit)
-        layout.addWidget(settings_btn)
+        self._settings_btn.clicked.connect(self.settings_requested.emit)
+        layout.addWidget(self._settings_btn)
 
         # Panel background
         self.setStyleSheet("""
@@ -115,3 +126,29 @@ class SidebarPanel(QWidget):
                 border-right: 1px solid #333;
             }
         """)
+
+    def toggle_collapse(self):
+        self._collapsed = not self._collapsed
+        if self._collapsed:
+            self._sessions_label.hide()
+            self._new_btn.hide()
+            self._session_list.hide()
+            self._settings_btn.hide()
+            self._collapse_btn.setText("\u00bb")
+            self._collapse_btn.setToolTip("Expand sidebar")
+            self.setMinimumWidth(40)
+            self.setMaximumWidth(40)
+        else:
+            self._sessions_label.show()
+            self._new_btn.show()
+            self._session_list.show()
+            self._settings_btn.show()
+            self._collapse_btn.setText("\u00ab")
+            self._collapse_btn.setToolTip("Collapse sidebar")
+            self.setMinimumWidth(180)
+            self.setMaximumWidth(16777215)  # QWIDGETSIZE_MAX
+        self.collapse_toggled.emit(self._collapsed)
+
+    @property
+    def is_collapsed(self) -> bool:
+        return self._collapsed
