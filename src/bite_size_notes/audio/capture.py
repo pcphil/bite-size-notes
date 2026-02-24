@@ -100,13 +100,50 @@ class AudioCaptureThread(threading.Thread):
             except Exception as e:
                 self._push_error(f"Loopback stream error: {e}")
 
-        # --- Accumulation loop ---
-        chunk_samples = int(self.SAMPLE_RATE * self.chunk_seconds)
+        # --- Silence-based accumulation loop ---
+        SILENCE_THRESHOLD = 0.01  # RMS below this = silence
+        SILENCE_DURATION = 0.8  # seconds of silence before flushing
+        POLL_INTERVAL = 0.1  # polling interval in seconds
+
+        had_speech = False
+        silence_start = None
+        last_flush = time.monotonic()
 
         while not self._stop_event.is_set():
-            self._stop_event.wait(self.chunk_seconds)
+            self._stop_event.wait(POLL_INTERVAL)
+            now = time.monotonic()
 
-            timestamp = time.monotonic() - self._start_time
+            # Check if either source has speech
+            is_speaking = (
+                self.mic_rms > SILENCE_THRESHOLD
+                or self.loopback_rms > SILENCE_THRESHOLD
+            )
+
+            if is_speaking:
+                had_speech = True
+                silence_start = None
+            elif had_speech and silence_start is None:
+                silence_start = now
+
+            elapsed = now - last_flush
+
+            # Flush when: speech ended + silence long enough, or max duration reached
+            should_flush = False
+            if had_speech and silence_start is not None:
+                if (now - silence_start) >= SILENCE_DURATION:
+                    should_flush = True
+            if elapsed >= self.chunk_seconds:
+                should_flush = True
+
+            if not should_flush:
+                continue
+
+            # Skip flush if buffer contains only silence
+            if not had_speech:
+                last_flush = now
+                continue
+
+            timestamp = now - self._start_time
 
             # Flush mic buffer
             with self._mic_lock:
@@ -130,7 +167,7 @@ class AudioCaptureThread(threading.Thread):
                     AudioChunk(
                         data=mic_data,
                         source="mic",
-                        timestamp=max(0, timestamp - self.chunk_seconds),
+                        timestamp=max(0, timestamp - elapsed),
                     )
                 )
 
@@ -139,9 +176,14 @@ class AudioCaptureThread(threading.Thread):
                     AudioChunk(
                         data=loopback_data,
                         source="loopback",
-                        timestamp=max(0, timestamp - self.chunk_seconds),
+                        timestamp=max(0, timestamp - elapsed),
                     )
                 )
+
+            # Reset state
+            had_speech = False
+            silence_start = None
+            last_flush = now
 
         # Cleanup
         for s in streams:
