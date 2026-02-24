@@ -12,20 +12,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-_SMALL_BTN_STYLE = """
-    QPushButton {
-        background-color: #333;
-        color: #d4d4d4;
-        border: 1px solid #555;
-        border-radius: 4px;
-        font-size: 16px;
-        font-weight: bold;
-    }
-    QPushButton:hover {
-        background-color: #444;
-    }
-"""
-
 
 class SidebarPanel(QWidget):
     """Collapsible left panel showing session history and settings access."""
@@ -50,20 +36,17 @@ class SidebarPanel(QWidget):
 
         self._sessions_label = QLabel("Sessions")
         self._sessions_label.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
-        self._sessions_label.setStyleSheet("color: #d4d4d4; background: transparent;")
         header_row.addWidget(self._sessions_label)
         header_row.addStretch()
 
         self._new_btn = QPushButton("+")
         self._new_btn.setFixedSize(28, 28)
         self._new_btn.setToolTip("New session")
-        self._new_btn.setStyleSheet(_SMALL_BTN_STYLE)
         header_row.addWidget(self._new_btn)
 
         self._collapse_btn = QPushButton("\u00ab")
         self._collapse_btn.setFixedSize(28, 28)
         self._collapse_btn.setToolTip("Collapse sidebar")
-        self._collapse_btn.setStyleSheet(_SMALL_BTN_STYLE)
         self._collapse_btn.clicked.connect(self.toggle_collapse)
         header_row.addWidget(self._collapse_btn)
 
@@ -71,26 +54,6 @@ class SidebarPanel(QWidget):
 
         # --- Session list ---
         self._session_list = QListWidget()
-        self._session_list.setStyleSheet("""
-            QListWidget {
-                background-color: #252526;
-                color: #d4d4d4;
-                border: 1px solid #333;
-                border-radius: 6px;
-                padding: 4px;
-                font-size: 13px;
-            }
-            QListWidget::item {
-                padding: 8px 6px;
-                border-radius: 4px;
-            }
-            QListWidget::item:selected {
-                background-color: #37373d;
-            }
-            QListWidget::item:hover {
-                background-color: #2a2d2e;
-            }
-        """)
 
         # Placeholder sessions
         for text in ["Current Session"]:
@@ -103,29 +66,9 @@ class SidebarPanel(QWidget):
 
         # --- Settings button ---
         self._settings_btn = QPushButton("Settings")
-        self._settings_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #333;
-                color: #d4d4d4;
-                border: 1px solid #555;
-                border-radius: 6px;
-                padding: 8px;
-                font-size: 13px;
-            }
-            QPushButton:hover {
-                background-color: #444;
-            }
-        """)
+        self._settings_btn.setObjectName("settingsBtn")
         self._settings_btn.clicked.connect(self.settings_requested.emit)
         layout.addWidget(self._settings_btn)
-
-        # Panel background
-        self.setStyleSheet("""
-            SidebarPanel {
-                background-color: #1e1e1e;
-                border-right: 1px solid #333;
-            }
-        """)
 
     def toggle_collapse(self):
         self._collapsed = not self._collapsed

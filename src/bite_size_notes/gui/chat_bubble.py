@@ -1,7 +1,7 @@
 """Chat-bubble widget for displaying a single transcript segment."""
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QColor, QFont
+from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -13,17 +13,14 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from bite_size_notes.gui.themes import get_palette
 from bite_size_notes.models.transcript import TranscriptSegment
+from bite_size_notes.utils.config import AppConfig
 
-SPEAKER_COLORS = {
-    "Me": "#2196F3",
-    "Others": "#4CAF50",
-}
 
-BUBBLE_BG = {
-    "Me": "#1a3a5c",
-    "Others": "#1c3d2a",
-}
+def _current_palette():
+    config = AppConfig()
+    return get_palette(config.theme)
 
 
 class _AutoResizePlainTextEdit(QPlainTextEdit):
@@ -69,11 +66,13 @@ class ChatBubbleWidget(QFrame):
         self._original_text = segment.text
 
         speaker = segment.speaker_label or segment.source
-        bg = BUBBLE_BG.get(speaker, "#2a2a2a")
-        color = SPEAKER_COLORS.get(speaker, "#d4d4d4")
         is_me = speaker == "Me"
 
-        # Frame styling
+        p = _current_palette()
+        bg = p["bubble_me_bg"] if is_me else p["bubble_others_bg"]
+        color = p["bubble_me_color"] if is_me else p["bubble_others_color"]
+
+        # Frame styling — dynamic per bubble
         self.setObjectName("chatBubble")
         self.setStyleSheet(f"""
             #chatBubble {{
@@ -102,19 +101,9 @@ class ChatBubbleWidget(QFrame):
         self._delete_btn = QPushButton("\u00d7")
         self._delete_btn.setFixedSize(20, 20)
         self._delete_btn.setToolTip("Delete this segment")
-        self._delete_btn.setStyleSheet("""
-            QPushButton {
-                background: transparent;
-                color: #888;
-                border: none;
-                font-size: 14px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                color: #ff5555;
-            }
-        """)
-        self._delete_btn.clicked.connect(lambda: self.delete_requested.emit(self._segment_index))
+        self._delete_btn.clicked.connect(
+            lambda: self.delete_requested.emit(self._segment_index)
+        )
         self._delete_btn.setVisible(editable)
         header_row.addWidget(self._delete_btn)
 
@@ -125,14 +114,6 @@ class ChatBubbleWidget(QFrame):
         self._text_edit.setPlainText(segment.text)
         self._text_edit.setReadOnly(not editable)
         self._text_edit.setFont(QFont("Segoe UI", 11))
-        self._text_edit.setStyleSheet("""
-            QPlainTextEdit {
-                background: transparent;
-                color: #d4d4d4;
-                border: none;
-                padding: 0px;
-            }
-        """)
         self._text_edit.focus_lost.connect(self._on_focus_lost)
         inner.addWidget(self._text_edit)
 

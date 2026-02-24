@@ -4,19 +4,19 @@ import queue
 import time
 
 from PySide6.QtCore import QThread, QTimer, Qt, Signal
-from PySide6.QtGui import QAction, QKeySequence
+from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QLabel,
     QMainWindow,
     QMessageBox,
     QProgressBar,
     QSplitter,
-    QToolBar,
     QVBoxLayout,
     QWidget,
 )
 
 from bite_size_notes.audio.capture import AudioCaptureThread
+from bite_size_notes.gui.themes import build_stylesheet, get_palette
 from bite_size_notes.audio.devices import get_default_mic, get_loopback_device
 from bite_size_notes.gui.export_dialog import export_transcript
 from bite_size_notes.gui.notes_panel import NotesPanel
@@ -55,8 +55,9 @@ class _ModelPreloadThread(QThread):
 
 
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, app=None):
         super().__init__()
+        self._app = app
         self.setWindowTitle("Bite-Size Notes")
         self.setMinimumSize(900, 500)
 
@@ -73,7 +74,6 @@ class MainWindow(QMainWindow):
         self._preload_thread: _ModelPreloadThread | None = None
 
         self._setup_ui()
-        self._setup_toolbar()
         self._setup_status_bar()
         self._setup_timers()
 
@@ -83,19 +83,13 @@ class MainWindow(QMainWindow):
 
     def _setup_ui(self):
         central = QWidget()
-        central.setStyleSheet("background-color: #1e1e1e;")
+        central.setObjectName("centralWidget")
         layout = QVBoxLayout(central)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
         # --- Three-panel splitter ---
         self._splitter = QSplitter(Qt.Orientation.Horizontal)
-        self._splitter.setStyleSheet("""
-            QSplitter::handle {
-                background-color: #333;
-                width: 1px;
-            }
-        """)
 
         # Left: sidebar
         self.sidebar = SidebarPanel()
@@ -124,37 +118,23 @@ class MainWindow(QMainWindow):
         self._saved_splitter_sizes = self._splitter.sizes()
         self.sidebar.collapse_toggled.connect(self._on_sidebar_collapse_toggled)
 
+        # Connect transcript view control signals
+        self.transcript_view.record_clicked.connect(self._on_record_clicked)
+        self.transcript_view.clear_clicked.connect(self._on_clear_clicked)
+
         # Connect output panel signals
         self.output_panel.notes_toggled.connect(self._toggle_notes)
         self.output_panel.export_clicked.connect(self._on_export_clicked)
 
         self.setCentralWidget(central)
 
+        # Keyboard shortcut for record (Ctrl+R)
+        record_shortcut = QShortcut(QKeySequence("Ctrl+R"), self)
+        record_shortcut.activated.connect(self._on_record_clicked)
+
         # --- Floating notes panel (parented to central widget, positioned later) ---
         self.notes_panel = NotesPanel(central)
         self.notes_panel.close_requested.connect(self._toggle_notes)
-
-    def _setup_toolbar(self):
-        toolbar = QToolBar("Main")
-        toolbar.setMovable(False)
-        toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        self.addToolBar(toolbar)
-
-        # Record button
-        self.record_action = QAction("Record", self)
-        self.record_action.setShortcut(QKeySequence("Ctrl+R"))
-        self.record_action.setToolTip("Start/Stop recording (Ctrl+R)")
-        self.record_action.triggered.connect(self._on_record_clicked)
-        toolbar.addAction(self.record_action)
-
-        toolbar.addSeparator()
-
-        # Clear button
-        clear_action = QAction("Clear", self)
-        clear_action.triggered.connect(self._on_clear_clicked)
-        toolbar.addAction(clear_action)
-
-        toolbar.addSeparator()
 
     def _setup_status_bar(self):
         self.status_label = QLabel("Ready for Recording")
@@ -310,7 +290,7 @@ class MainWindow(QMainWindow):
 
         self.is_recording = True
         self._record_start_time = time.monotonic()
-        self.record_action.setText("Stop")
+        self.transcript_view.set_recording(True)
         self.ui_timer.start()
 
     def _stop_recording(self):
@@ -326,7 +306,7 @@ class MainWindow(QMainWindow):
             self.transcriber_worker = None
 
         self.is_recording = False
-        self.record_action.setText("Record")
+        self.transcript_view.set_recording(False)
         self.status_label.setText("Stopped — click any bubble to edit")
         self.transcript_view.set_editable(True)
         self.duration_label.setText("")
@@ -411,8 +391,14 @@ class MainWindow(QMainWindow):
 
         old_model = self.config.model_size
         old_language = self.config.language
+        old_theme = self.config.theme
         dialog = SettingsDialog(self.config, self)
         if dialog.exec() == SettingsDialog.DialogCode.Accepted:
+            # Reapply theme if changed
+            if self.config.theme != old_theme and self._app is not None:
+                self._app.setStyleSheet(
+                    build_stylesheet(get_palette(self.config.theme))
+                )
             if self.config.model_size != old_model or self.config.language != old_language:
                 self._preloaded_engine = None
                 if is_model_cached(self.config.model_size):

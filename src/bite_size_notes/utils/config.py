@@ -45,6 +45,16 @@ class AppConfig:
     def language(self, value: str):
         self.settings.setValue("transcription/language", value)
 
+    # --- Appearance ---
+
+    @property
+    def theme(self) -> str:
+        return str(self.settings.value("appearance/theme", "dark"))
+
+    @theme.setter
+    def theme(self, value: str):
+        self.settings.setValue("appearance/theme", value)
+
     # --- Recording ---
 
 

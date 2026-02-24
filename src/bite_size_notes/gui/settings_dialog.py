@@ -67,8 +67,26 @@ class SettingsDialog(QDialog):
         self._setup_ui()
         self._load_settings()
 
+    THEMES = [
+        ("Dark", "dark"),
+        ("Light", "light"),
+        ("System", "system"),
+    ]
+
     def _setup_ui(self):
         layout = QVBoxLayout(self)
+
+        # --- Appearance ---
+        appearance_group = QGroupBox("Appearance")
+        appearance_layout = QFormLayout()
+
+        self.theme_combo = QComboBox()
+        for name, value in self.THEMES:
+            self.theme_combo.addItem(name, value)
+        appearance_layout.addRow("Theme:", self.theme_combo)
+
+        appearance_group.setLayout(appearance_layout)
+        layout.addWidget(appearance_group)
 
         # --- Audio devices ---
         audio_group = QGroupBox("Audio Devices")
@@ -175,6 +193,11 @@ class SettingsDialog(QDialog):
             self.loopback_combo.addItem(dev.name, dev.index)
 
     def _load_settings(self):
+        # Theme
+        theme_idx = self.theme_combo.findData(self.config.theme)
+        if theme_idx >= 0:
+            self.theme_combo.setCurrentIndex(theme_idx)
+
         self._refresh_devices()
 
         # Restore saved mic device
@@ -201,6 +224,7 @@ class SettingsDialog(QDialog):
         self._update_model_status()
 
     def _save_and_accept(self):
+        self.config.theme = self.theme_combo.currentData()
         self.config.mic_device = self.mic_combo.currentData()
         self.config.loopback_device = self.loopback_combo.currentData()
         self.config.model_size = self.model_combo.currentText()
