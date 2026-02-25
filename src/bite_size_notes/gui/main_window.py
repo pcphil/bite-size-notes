@@ -116,6 +116,7 @@ class MainWindow(QMainWindow):
 
         # Connect sidebar collapse to redistribute splitter space
         self._saved_splitter_sizes = self._splitter.sizes()
+        self._saved_output_sizes = self._splitter.sizes()
         self.sidebar.collapse_toggled.connect(self._on_sidebar_collapse_toggled)
 
         # Connect transcript view control signals
@@ -125,6 +126,7 @@ class MainWindow(QMainWindow):
         # Connect output panel signals
         self.output_panel.notes_toggled.connect(self._toggle_notes)
         self.output_panel.export_clicked.connect(self._on_export_clicked)
+        self.output_panel.collapse_toggled.connect(self._on_output_collapse_toggled)
 
         self.setCentralWidget(central)
 
@@ -366,6 +368,16 @@ class MainWindow(QMainWindow):
         else:
             # Restore previous proportions
             self._splitter.setSizes(self._saved_splitter_sizes)
+
+    def _on_output_collapse_toggled(self, collapsed: bool):
+        """Redistribute splitter space when the output panel collapses/expands."""
+        sizes = self._splitter.sizes()
+        total = sum(sizes)
+        if collapsed:
+            self._saved_output_sizes = sizes
+            self._splitter.setSizes([sizes[0], total - sizes[0] - 40, 40])
+        else:
+            self._splitter.setSizes(self._saved_output_sizes)
 
     def _position_notes_panel(self):
         """Anchor the notes panel at the bottom-right of the central widget."""

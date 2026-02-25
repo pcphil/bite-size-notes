@@ -250,6 +250,12 @@ def build_stylesheet(p: dict[str, Any]) -> str:
     OutputPanel QPushButton:hover {{
         background-color: {p["btn_hover"]};
     }}
+    OutputPanel QPushButton#iconBtn {{
+        border-radius: 6px;
+        padding: 0px;
+        font-size: 14px;
+        font-weight: bold;
+    }}
     OutputPanel QPlainTextEdit {{
         background-color: {p["bg_secondary"]};
         color: {p["text"]};
@@ -281,22 +287,58 @@ def build_stylesheet(p: dict[str, Any]) -> str:
         background-color: {p["btn_hover"]};
     }}
 
-    /* === Chat bubble text === */
-    #chatBubble QPlainTextEdit {{
+    /* === Chat bubble — "Me" === */
+    #chatBubbleMe {{
+        background-color: {p["bubble_me_bg"]};
+        border-radius: 12px;
+        padding: 4px;
+    }}
+    #chatBubbleMe QPlainTextEdit {{
         background: transparent;
         color: {p["text"]};
         border: none;
         padding: 0px;
     }}
-    #chatBubble QPushButton {{
+    #chatBubbleMe QPushButton {{
         background: transparent;
         color: {p["muted_text"]};
         border: none;
         font-size: 14px;
         font-weight: bold;
     }}
-    #chatBubble QPushButton:hover {{
+    #chatBubbleMe QPushButton:hover {{
         color: {p["delete_hover"]};
+    }}
+    #bubbleHeaderMe {{
+        color: {p["bubble_me_color"]};
+        background: transparent;
+    }}
+
+    /* === Chat bubble — "Others" === */
+    #chatBubbleOthers {{
+        background-color: {p["bubble_others_bg"]};
+        border-radius: 12px;
+        padding: 4px;
+    }}
+    #chatBubbleOthers QPlainTextEdit {{
+        background: transparent;
+        color: {p["text"]};
+        border: none;
+        padding: 0px;
+    }}
+    #chatBubbleOthers QPushButton {{
+        background: transparent;
+        color: {p["muted_text"]};
+        border: none;
+        font-size: 14px;
+        font-weight: bold;
+    }}
+    #chatBubbleOthers QPushButton:hover {{
+        color: {p["delete_hover"]};
+    }}
+    #bubbleHeaderOthers {{
+        color: {p["bubble_others_color"]};
+        background: transparent;
     }}
 
     /* === Notes panel === */

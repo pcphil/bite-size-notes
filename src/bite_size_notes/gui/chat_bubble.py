@@ -1,7 +1,7 @@
 """Chat-bubble widget for displaying a single transcript segment."""
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QTextOption
 from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -13,14 +13,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from bite_size_notes.gui.themes import get_palette
 from bite_size_notes.models.transcript import TranscriptSegment
-from bite_size_notes.utils.config import AppConfig
-
-
-def _current_palette():
-    config = AppConfig()
-    return get_palette(config.theme)
 
 
 class _AutoResizePlainTextEdit(QPlainTextEdit):
@@ -36,12 +29,17 @@ class _AutoResizePlainTextEdit(QPlainTextEdit):
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.setWordWrapMode(QTextOption.WrapMode.WordWrap)
 
     def _adjust_height(self):
         doc_height = int(self.document().size().height())
         margins = self.contentsMargins()
         height = doc_height + margins.top() + margins.bottom() + 4
         self.setFixedHeight(max(height, 28))
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._adjust_height()
 
     def focusOutEvent(self, event):
         super().focusOutEvent(event)
@@ -68,20 +66,8 @@ class ChatBubbleWidget(QFrame):
         speaker = segment.speaker_label or segment.source
         is_me = speaker == "Me"
 
-        p = _current_palette()
-        bg = p["bubble_me_bg"] if is_me else p["bubble_others_bg"]
-        color = p["bubble_me_color"] if is_me else p["bubble_others_color"]
-
-        # Frame styling — dynamic per bubble
-        self.setObjectName("chatBubble")
-        self.setStyleSheet(f"""
-            #chatBubble {{
-                background-color: {bg};
-                border-radius: 12px;
-                padding: 4px;
-            }}
-        """)
-        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Fixed)
+        self.setObjectName("chatBubbleMe" if is_me else "chatBubbleOthers")
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
 
         # Layout inside bubble
         inner = QVBoxLayout(self)
@@ -93,8 +79,8 @@ class ChatBubbleWidget(QFrame):
         header_row.setContentsMargins(0, 0, 0, 0)
 
         header = QLabel(f"[{segment.time_str}] {speaker}")
+        header.setObjectName("bubbleHeaderMe" if is_me else "bubbleHeaderOthers")
         header.setFont(QFont("Consolas", 9))
-        header.setStyleSheet(f"color: {color}; background: transparent;")
         header_row.addWidget(header)
         header_row.addStretch()
 
@@ -119,9 +105,9 @@ class ChatBubbleWidget(QFrame):
 
         # Alignment via margins: "Me" pushed right, "Others" pushed left
         if is_me:
-            self.setContentsMargins(120, 2, 8, 2)
+            self.setContentsMargins(40, 2, 8, 2)
         else:
-            self.setContentsMargins(8, 2, 120, 2)
+            self.setContentsMargins(8, 2, 40, 2)
 
     def set_editable(self, editable: bool):
         self._text_edit.setReadOnly(not editable)

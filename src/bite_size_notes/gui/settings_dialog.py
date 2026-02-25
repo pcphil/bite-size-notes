@@ -17,6 +17,7 @@ from bite_size_notes.audio.devices import (
     list_input_devices,
     list_loopback_devices,
 )
+from bite_size_notes.gui.themes import get_palette
 from bite_size_notes.transcription.model_utils import (
     download_model_sync,
     is_model_cached,
@@ -146,22 +147,24 @@ class SettingsDialog(QDialog):
 
     def _update_model_status(self):
         """Check whether the currently selected model is cached and update the label."""
+        p = get_palette(self.config.theme)
         model = self.model_combo.currentText()
         if is_model_cached(model):
             self._model_status.setText("Ready")
-            self._model_status.setStyleSheet("color: green; font-weight: bold;")
+            self._model_status.setStyleSheet(f"color: {p['status_green']}; font-weight: bold;")
             self._download_btn.setEnabled(False)
         else:
             self._model_status.setText("Not downloaded")
-            self._model_status.setStyleSheet("color: orange; font-weight: bold;")
+            self._model_status.setStyleSheet(f"color: {p['status_orange']}; font-weight: bold;")
             self._download_btn.setEnabled(True)
 
     def _start_download(self):
         """Download the selected model in a background thread."""
+        p = get_palette(self.config.theme)
         model = self.model_combo.currentText()
         self._download_btn.setEnabled(False)
         self._model_status.setText("Downloading...")
-        self._model_status.setStyleSheet("color: gray; font-weight: bold;")
+        self._model_status.setStyleSheet(f"color: {p['status_gray']}; font-weight: bold;")
 
         self._download_thread = _ModelDownloadThread(model, self)
         self._download_thread.finished.connect(self._on_download_finished)
@@ -173,9 +176,10 @@ class SettingsDialog(QDialog):
         self._update_model_status()
 
     def _on_download_error(self, message: str):
+        p = get_palette(self.config.theme)
         self._download_thread = None
         self._model_status.setText("Download failed")
-        self._model_status.setStyleSheet("color: red; font-weight: bold;")
+        self._model_status.setStyleSheet(f"color: {p['status_red']}; font-weight: bold;")
         self._download_btn.setEnabled(True)
 
     def _refresh_devices(self):
