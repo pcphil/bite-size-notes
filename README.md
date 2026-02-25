@@ -1,4 +1,6 @@
-# Bite-Size Notes
+<p align="center">
+  <img src="src/bite_size_notes/assets/readme.png" alt="Bite-Size Notes" width="800"/>
+</p>
 
 A desktop meeting transcriber that captures your microphone and system audio simultaneously, runs local Whisper speech-to-text, and displays a live color-coded transcript.
 
