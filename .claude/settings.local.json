@@ -10,7 +10,9 @@
       "Bash(cd /c/Users/chung/projects/bite-size-notes && uv run pytest 2>&1)",
       "Bash(cd /c/Users/chung/projects/bite-size-notes && uv run python -c \"from bite_size_notes.transcription.model_utils import is_model_cached, download_model_sync; print\\('model_utils OK'\\)\" 2>&1)",
       "Bash(cd /c/Users/chung/projects/bite-size-notes && uv run ruff check src/bite_size_notes/transcription/worker.py src/bite_size_notes/gui/main_window.py 2>&1)",
-      "Bash(cd /c/Users/chung/projects/bite-size-notes && uv run python -c \"from bite_size_notes.gui.main_window import MainWindow; print\\('OK'\\)\" 2>&1)"
+      "Bash(cd /c/Users/chung/projects/bite-size-notes && uv run python -c \"from bite_size_notes.gui.main_window import MainWindow; print\\('OK'\\)\" 2>&1)",
+      "Bash(cd /c/Users/chung/projects/bite-size-notes && uv run ruff check src/bite_size_notes/gui/sidebar_panel.py src/bite_size_notes/gui/notes_panel.py src/bite_size_notes/gui/main_window.py 2>&1)",
+      "Bash(ls:*)"
     ]
   }
 }

@@ -10,7 +10,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
-    QSpinBox,
     QVBoxLayout,
 )
 
@@ -18,6 +17,7 @@ from bite_size_notes.audio.devices import (
     list_input_devices,
     list_loopback_devices,
 )
+from bite_size_notes.gui.themes import get_palette
 from bite_size_notes.transcription.model_utils import (
     download_model_sync,
     is_model_cached,
@@ -68,8 +68,26 @@ class SettingsDialog(QDialog):
         self._setup_ui()
         self._load_settings()
 
+    THEMES = [
+        ("Dark", "dark"),
+        ("Light", "light"),
+        ("System", "system"),
+    ]
+
     def _setup_ui(self):
         layout = QVBoxLayout(self)
+
+        # --- Appearance ---
+        appearance_group = QGroupBox("Appearance")
+        appearance_layout = QFormLayout()
+
+        self.theme_combo = QComboBox()
+        for name, value in self.THEMES:
+            self.theme_combo.addItem(name, value)
+        appearance_layout.addRow("Theme:", self.theme_combo)
+
+        appearance_group.setLayout(appearance_layout)
+        layout.addWidget(appearance_group)
 
         # --- Audio devices ---
         audio_group = QGroupBox("Audio Devices")
@@ -116,11 +134,6 @@ class SettingsDialog(QDialog):
             self.lang_combo.addItem(name, code)
         trans_layout.addRow("Language:", self.lang_combo)
 
-        self.chunk_spin = QSpinBox()
-        self.chunk_spin.setRange(3, 30)
-        self.chunk_spin.setSuffix(" seconds")
-        trans_layout.addRow("Chunk Duration:", self.chunk_spin)
-
         trans_group.setLayout(trans_layout)
         layout.addWidget(trans_group)
 
@@ -134,22 +147,24 @@ class SettingsDialog(QDialog):
 
     def _update_model_status(self):
         """Check whether the currently selected model is cached and update the label."""
+        p = get_palette(self.config.theme)
         model = self.model_combo.currentText()
         if is_model_cached(model):
             self._model_status.setText("Ready")
-            self._model_status.setStyleSheet("color: green; font-weight: bold;")
+            self._model_status.setStyleSheet(f"color: {p['status_green']}; font-weight: bold;")
             self._download_btn.setEnabled(False)
         else:
             self._model_status.setText("Not downloaded")
-            self._model_status.setStyleSheet("color: orange; font-weight: bold;")
+            self._model_status.setStyleSheet(f"color: {p['status_orange']}; font-weight: bold;")
             self._download_btn.setEnabled(True)
 
     def _start_download(self):
         """Download the selected model in a background thread."""
+        p = get_palette(self.config.theme)
         model = self.model_combo.currentText()
         self._download_btn.setEnabled(False)
         self._model_status.setText("Downloading...")
-        self._model_status.setStyleSheet("color: gray; font-weight: bold;")
+        self._model_status.setStyleSheet(f"color: {p['status_gray']}; font-weight: bold;")
 
         self._download_thread = _ModelDownloadThread(model, self)
         self._download_thread.finished.connect(self._on_download_finished)
@@ -161,9 +176,10 @@ class SettingsDialog(QDialog):
         self._update_model_status()
 
     def _on_download_error(self, message: str):
+        p = get_palette(self.config.theme)
         self._download_thread = None
         self._model_status.setText("Download failed")
-        self._model_status.setStyleSheet("color: red; font-weight: bold;")
+        self._model_status.setStyleSheet(f"color: {p['status_red']}; font-weight: bold;")
         self._download_btn.setEnabled(True)
 
     def _refresh_devices(self):
@@ -181,6 +197,11 @@ class SettingsDialog(QDialog):
             self.loopback_combo.addItem(dev.name, dev.index)
 
     def _load_settings(self):
+        # Theme
+        theme_idx = self.theme_combo.findData(self.config.theme)
+        if theme_idx >= 0:
+            self.theme_combo.setCurrentIndex(theme_idx)
+
         self._refresh_devices()
 
         # Restore saved mic device
@@ -203,16 +224,13 @@ class SettingsDialog(QDialog):
         if lang_idx >= 0:
             self.lang_combo.setCurrentIndex(lang_idx)
 
-        # Chunk duration
-        self.chunk_spin.setValue(int(self.config.chunk_seconds))
-
         # Initial model status check
         self._update_model_status()
 
     def _save_and_accept(self):
+        self.config.theme = self.theme_combo.currentData()
         self.config.mic_device = self.mic_combo.currentData()
         self.config.loopback_device = self.loopback_combo.currentData()
         self.config.model_size = self.model_combo.currentText()
         self.config.language = self.lang_combo.currentData() or "en"
-        self.config.chunk_seconds = float(self.chunk_spin.value())
         self.accept()

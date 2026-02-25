@@ -45,12 +45,16 @@ class AppConfig:
     def language(self, value: str):
         self.settings.setValue("transcription/language", value)
 
-    # --- Recording ---
+    # --- Appearance ---
 
     @property
-    def chunk_seconds(self) -> float:
-        return float(self.settings.value("recording/chunk_seconds", 5.0))
+    def theme(self) -> str:
+        return str(self.settings.value("appearance/theme", "dark"))
 
-    @chunk_seconds.setter
-    def chunk_seconds(self, value: float):
-        self.settings.setValue("recording/chunk_seconds", value)
+    @theme.setter
+    def theme(self, value: str):
+        self.settings.setValue("appearance/theme", value)
+
+    # --- Recording ---
+
+

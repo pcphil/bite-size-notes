@@ -57,6 +57,10 @@ class TranscriberWorker(QThread):
             if chunk is None:
                 break
 
+            # Exit immediately if stop was requested while waiting
+            if self._stop:
+                break
+
             try:
                 segments = engine.transcribe(chunk.data)
                 for seg in segments:
@@ -72,6 +76,12 @@ class TranscriberWorker(QThread):
     def stop(self):
         """Signal the worker to stop."""
         self._stop = True
+        # Drain remaining chunks so worker doesn't process them
+        while not self.audio_queue.empty():
+            try:
+                self.audio_queue.get_nowait()
+            except queue.Empty:
+                break
         # Push sentinel to unblock the queue.get()
         try:
             self.audio_queue.put_nowait(None)

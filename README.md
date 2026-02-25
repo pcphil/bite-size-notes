@@ -1,4 +1,6 @@
-# Bite-Size Notes
+<p align="center">
+  <img src="src/bite_size_notes/assets/readme.png" alt="Bite-Size Notes" width="800"/>
+</p>
 
 A desktop meeting transcriber that captures your microphone and system audio simultaneously, runs local Whisper speech-to-text, and displays a live color-coded transcript.
 
@@ -31,7 +33,7 @@ uv run bite-size-notes
 1. Click **Record** (or `Ctrl+R`) to start capturing audio
 2. The transcript appears live in the main window
 3. Click **Stop** to end the recording
-4. Click **Export** (`Ctrl+E`) to save the transcript
+4. Click the **📥 Export** button in the output panel to save the transcript
 
 ### Settings
 

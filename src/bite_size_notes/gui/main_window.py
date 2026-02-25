@@ -4,21 +4,25 @@ import queue
 import time
 
 from PySide6.QtCore import QThread, QTimer, Qt, Signal
-from PySide6.QtGui import QAction, QFont, QKeySequence
+from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QLabel,
     QMainWindow,
     QMessageBox,
     QProgressBar,
-    QToolBar,
+    QSplitter,
     QVBoxLayout,
     QWidget,
 )
 
 from bite_size_notes.audio.capture import AudioCaptureThread
+from bite_size_notes.gui.themes import build_stylesheet, get_palette
 from bite_size_notes.audio.devices import get_default_mic, get_loopback_device
 from bite_size_notes.gui.export_dialog import export_transcript
+from bite_size_notes.gui.notes_panel import NotesPanel
+from bite_size_notes.gui.output_panel import OutputPanel
 from bite_size_notes.gui.settings_dialog import SettingsDialog
+from bite_size_notes.gui.sidebar_panel import SidebarPanel
 from bite_size_notes.gui.transcript_view import TranscriptView
 from bite_size_notes.models.transcript import TranscriptSegment, TranscriptSession
 from bite_size_notes.transcription.engine import TranscriptionEngine
@@ -51,10 +55,11 @@ class _ModelPreloadThread(QThread):
 
 
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, app=None):
         super().__init__()
+        self._app = app
         self.setWindowTitle("Bite-Size Notes")
-        self.setMinimumSize(700, 500)
+        self.setMinimumSize(900, 500)
 
         self.config = AppConfig()
         self.audio_queue: queue.Queue = queue.Queue(maxsize=100)
@@ -69,7 +74,6 @@ class MainWindow(QMainWindow):
         self._preload_thread: _ModelPreloadThread | None = None
 
         self._setup_ui()
-        self._setup_toolbar()
         self._setup_status_bar()
         self._setup_timers()
 
@@ -79,54 +83,63 @@ class MainWindow(QMainWindow):
 
     def _setup_ui(self):
         central = QWidget()
+        central.setObjectName("centralWidget")
         layout = QVBoxLayout(central)
         layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
 
+        # --- Three-panel splitter ---
+        self._splitter = QSplitter(Qt.Orientation.Horizontal)
+
+        # Left: sidebar
+        self.sidebar = SidebarPanel()
+        self.sidebar.settings_requested.connect(self._on_settings_clicked)
+        self._splitter.addWidget(self.sidebar)
+
+        # Center: transcript
         self.transcript_view = TranscriptView()
         self.transcript_view.text_edited.connect(self._on_bubble_text_edited)
         self.transcript_view.delete_requested.connect(self._on_bubble_deleted)
-        layout.addWidget(self.transcript_view)
+        self._splitter.addWidget(self.transcript_view)
+
+        # Right: output
+        self.output_panel = OutputPanel()
+        self._splitter.addWidget(self.output_panel)
+
+        # Set initial sizes (sidebar 220, transcript stretches, output 350)
+        self._splitter.setSizes([220, 400, 350])
+        self._splitter.setStretchFactor(0, 0)
+        self._splitter.setStretchFactor(1, 1)
+        self._splitter.setStretchFactor(2, 0)
+
+        layout.addWidget(self._splitter, 1)
+
+        # Connect sidebar collapse to redistribute splitter space
+        self._saved_splitter_sizes = self._splitter.sizes()
+        self._saved_output_sizes = self._splitter.sizes()
+        self.sidebar.collapse_toggled.connect(self._on_sidebar_collapse_toggled)
+
+        # Connect transcript view control signals
+        self.transcript_view.record_clicked.connect(self._on_record_clicked)
+        self.transcript_view.clear_clicked.connect(self._on_clear_clicked)
+
+        # Connect output panel signals
+        self.output_panel.notes_toggled.connect(self._toggle_notes)
+        self.output_panel.export_clicked.connect(self._on_export_clicked)
+        self.output_panel.collapse_toggled.connect(self._on_output_collapse_toggled)
 
         self.setCentralWidget(central)
 
-    def _setup_toolbar(self):
-        toolbar = QToolBar("Main")
-        toolbar.setMovable(False)
-        toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        self.addToolBar(toolbar)
+        # Keyboard shortcut for record (Ctrl+R)
+        record_shortcut = QShortcut(QKeySequence("Ctrl+R"), self)
+        record_shortcut.activated.connect(self._on_record_clicked)
 
-        # Record button
-        self.record_action = QAction("Record", self)
-        self.record_action.setShortcut(QKeySequence("Ctrl+R"))
-        self.record_action.setToolTip("Start/Stop recording (Ctrl+R)")
-        self.record_action.triggered.connect(self._on_record_clicked)
-        toolbar.addAction(self.record_action)
-
-        toolbar.addSeparator()
-
-        # Export button
-        export_action = QAction("Export", self)
-        export_action.setShortcut(QKeySequence("Ctrl+E"))
-        export_action.setToolTip("Export transcript (Ctrl+E)")
-        export_action.triggered.connect(self._on_export_clicked)
-        toolbar.addAction(export_action)
-
-        # Clear button
-        clear_action = QAction("Clear", self)
-        clear_action.triggered.connect(self._on_clear_clicked)
-        toolbar.addAction(clear_action)
-
-        toolbar.addSeparator()
-
-        # Settings button
-        settings_action = QAction("Settings", self)
-        settings_action.setShortcut(QKeySequence("Ctrl+,"))
-        settings_action.setToolTip("Open settings (Ctrl+,)")
-        settings_action.triggered.connect(self._on_settings_clicked)
-        toolbar.addAction(settings_action)
+        # --- Floating notes panel (parented to central widget, positioned later) ---
+        self.notes_panel = NotesPanel(central)
+        self.notes_panel.close_requested.connect(self._toggle_notes)
 
     def _setup_status_bar(self):
-        self.status_label = QLabel("Ready")
+        self.status_label = QLabel("Ready for Recording")
         self.statusBar().addWidget(self.status_label, 1)
 
         self.duration_label = QLabel("")
@@ -168,7 +181,7 @@ class MainWindow(QMainWindow):
         )
         self._preload_thread.loaded.connect(self._on_model_preloaded)
         self._preload_thread.error.connect(self._on_preload_error)
-        self.status_label.setText("Loading model...")
+        self.status_label.setText("Loading transcriber...")
         self._preload_thread.start()
 
     def _on_model_preloaded(self, engine):
@@ -274,13 +287,12 @@ class MainWindow(QMainWindow):
             mic_device_index=mic_device,
             loopback_device_index=loopback_device,
             audio_queue=self.audio_queue,
-            chunk_seconds=self.config.chunk_seconds,
         )
         self.capture_thread.start()
 
         self.is_recording = True
         self._record_start_time = time.monotonic()
-        self.record_action.setText("Stop")
+        self.transcript_view.set_recording(True)
         self.ui_timer.start()
 
     def _stop_recording(self):
@@ -296,7 +308,7 @@ class MainWindow(QMainWindow):
             self.transcriber_worker = None
 
         self.is_recording = False
-        self.record_action.setText("Record")
+        self.transcript_view.set_recording(False)
         self.status_label.setText("Stopped — click any bubble to edit")
         self.transcript_view.set_editable(True)
         self.duration_label.setText("")
@@ -326,6 +338,7 @@ class MainWindow(QMainWindow):
     def _on_clear_clicked(self):
         self.transcript_session.clear()
         self.transcript_view.clear_transcript()
+        self.notes_panel.clear()
 
     def _on_bubble_text_edited(self, index: int, new_text: str):
         """Sync an edited bubble's text back to the transcript session."""
@@ -337,6 +350,50 @@ class MainWindow(QMainWindow):
         if 0 <= index < len(self.transcript_session.segments):
             self.transcript_session.segments.pop(index)
 
+    def _toggle_notes(self):
+        if self.notes_panel.isVisible():
+            self.notes_panel.hide()
+        else:
+            self._position_notes_panel()
+            self.notes_panel.show()
+            self.notes_panel.raise_()
+
+    def _on_sidebar_collapse_toggled(self, collapsed: bool):
+        """Redistribute splitter space when the sidebar collapses/expands."""
+        sizes = self._splitter.sizes()
+        total = sum(sizes)
+        if collapsed:
+            self._saved_splitter_sizes = sizes
+            self._splitter.setSizes([40, total - 40 - sizes[2], sizes[2]])
+        else:
+            # Restore previous proportions
+            self._splitter.setSizes(self._saved_splitter_sizes)
+
+    def _on_output_collapse_toggled(self, collapsed: bool):
+        """Redistribute splitter space when the output panel collapses/expands."""
+        sizes = self._splitter.sizes()
+        total = sum(sizes)
+        if collapsed:
+            self._saved_output_sizes = sizes
+            self._splitter.setSizes([sizes[0], total - sizes[0] - 40, 40])
+        else:
+            self._splitter.setSizes(self._saved_output_sizes)
+
+    def _position_notes_panel(self):
+        """Anchor the notes panel at the bottom-right of the central widget."""
+        central = self.centralWidget()
+        if central is None:
+            return
+        margin = 12
+        x = central.width() - self.notes_panel.width() - margin
+        y = central.height() - self.notes_panel.height() - margin
+        self.notes_panel.move(max(x, 0), max(y, 0))
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if self.notes_panel.isVisible():
+            self._position_notes_panel()
+
     def _on_settings_clicked(self):
         if self.is_recording:
             QMessageBox.information(
@@ -346,8 +403,14 @@ class MainWindow(QMainWindow):
 
         old_model = self.config.model_size
         old_language = self.config.language
+        old_theme = self.config.theme
         dialog = SettingsDialog(self.config, self)
         if dialog.exec() == SettingsDialog.DialogCode.Accepted:
+            # Reapply theme if changed
+            if self.config.theme != old_theme and self._app is not None:
+                self._app.setStyleSheet(
+                    build_stylesheet(get_palette(self.config.theme))
+                )
             if self.config.model_size != old_model or self.config.language != old_language:
                 self._preloaded_engine = None
                 if is_model_cached(self.config.model_size):
