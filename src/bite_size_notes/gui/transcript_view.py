@@ -73,6 +73,12 @@ class TranscriptView(QWidget):
         self._bubbles: list[TranscriptLineWidget] = []
         self._editable = False
 
+    def resizeEvent(self, event):
+        """Propagate width changes to bubbles so text re-wraps."""
+        super().resizeEvent(event)
+        for bubble in self._bubbles:
+            bubble._text_edit._adjust_height()
+
     def set_recording(self, recording: bool):
         """Toggle the record button icon between stop and play."""
         if recording:

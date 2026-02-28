@@ -35,14 +35,10 @@ class OutputPanel(QWidget):
         self._btn_row.setSpacing(4)
         self._btn_row.setAlignment(Qt.AlignmentFlag.AlignVCenter)
 
-        self._action_btns = []
-        for label in ("Bite Size It", "Tone", "Model"):
-            btn = QPushButton(label)
-            btn.setFixedHeight(28)
-            self._btn_row.addWidget(btn)
-            self._action_btns.append(btn)
-
-        self._action_btns[0].clicked.connect(self.bite_size_clicked.emit)
+        self._bite_size_btn = QPushButton("Bite Size It")
+        self._bite_size_btn.setFixedHeight(28)
+        self._btn_row.addWidget(self._bite_size_btn)
+        self._bite_size_btn.clicked.connect(self.bite_size_clicked.emit)
 
         self._copy_btn = QPushButton("\U0001f4cb")
         self._copy_btn.setObjectName("iconBtn")
@@ -90,8 +86,7 @@ class OutputPanel(QWidget):
     def toggle_collapse(self):
         self._collapsed = not self._collapsed
         if self._collapsed:
-            for btn in self._action_btns:
-                btn.hide()
+            self._bite_size_btn.hide()
             self._copy_btn.hide()
             self._export_btn.hide()
             self._text_edit.hide()
@@ -101,8 +96,7 @@ class OutputPanel(QWidget):
             self.setMinimumWidth(40)
             self.setMaximumWidth(40)
         else:
-            for btn in self._action_btns:
-                btn.show()
+            self._bite_size_btn.show()
             self._copy_btn.show()
             self._export_btn.show()
             self._text_edit.show()
