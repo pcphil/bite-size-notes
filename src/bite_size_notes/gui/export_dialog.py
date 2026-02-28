@@ -1,4 +1,4 @@
-"""Export dialog for saving transcripts."""
+"""Export dialog for saving transcripts and output text."""
 
 from pathlib import Path
 
@@ -46,6 +46,29 @@ def export_transcript(session: TranscriptSession, parent: QWidget | None = None)
     content = exporters.get(ext, session.to_text)()
     path.write_text(content, encoding="utf-8")
 
-    QMessageBox.information(
-        parent, "Export", f"Transcript exported to:\n{path}"
+    QMessageBox.information(parent, "Export", f"Transcript exported to:\n{path}")
+
+
+def export_output(text: str, parent: QWidget | None = None):
+    """Show a file save dialog and export the summarization output as plain text."""
+    if not text.strip():
+        QMessageBox.information(parent, "Export", "No output to export.")
+        return
+
+    file_path, _ = QFileDialog.getSaveFileName(
+        parent,
+        "Export Output",
+        "output",
+        "Plain Text (*.txt)",
     )
+
+    if not file_path:
+        return
+
+    path = Path(file_path)
+    if not path.suffix:
+        path = path.with_suffix(".txt")
+
+    path.write_text(text, encoding="utf-8")
+
+    QMessageBox.information(parent, "Export", f"Output exported to:\n{path}")

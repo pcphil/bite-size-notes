@@ -35,6 +35,7 @@ class TranscriptSession:
     start_time: datetime = field(default_factory=datetime.now)
     id: str = field(default_factory=lambda: str(uuid4()))
     title: str = ""
+    summary: str = ""
 
     def __post_init__(self):
         if not self.title:
@@ -54,6 +55,7 @@ class TranscriptSession:
         return {
             "id": self.id,
             "title": self.title,
+            "summary": self.summary,
             "start_time": self.start_time.isoformat(),
             "segments": [
                 {
@@ -83,6 +85,7 @@ class TranscriptSession:
             start_time=datetime.fromisoformat(data["start_time"]),
             id=data["id"],
             title=data.get("title", ""),
+            summary=data.get("summary", ""),
         )
 
     def save(self, path: Path) -> None:

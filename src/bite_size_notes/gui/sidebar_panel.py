@@ -18,9 +18,10 @@ _ROLE_SESSION_ID = Qt.ItemDataRole.UserRole
 
 
 class _SessionItemWidget(QWidget):
-    """Custom widget for a session list item with title, date, and delete button."""
+    """Custom widget for a session list item with title, date, and action buttons."""
 
     delete_clicked = Signal(str)  # session_id
+    rename_clicked = Signal(str)  # session_id
 
     def __init__(self, session_id: str, title: str, start_time_str: str, parent=None):
         super().__init__(parent)
@@ -45,6 +46,12 @@ class _SessionItemWidget(QWidget):
 
         layout.addLayout(info, 1)
 
+        rename_btn = QPushButton("\u270f")
+        rename_btn.setFixedSize(20, 20)
+        rename_btn.setToolTip("Rename session")
+        rename_btn.clicked.connect(lambda: self.rename_clicked.emit(self._session_id))
+        layout.addWidget(rename_btn)
+
         delete_btn = QPushButton("\u00d7")
         delete_btn.setFixedSize(20, 20)
         delete_btn.setToolTip("Delete session")
@@ -53,18 +60,17 @@ class _SessionItemWidget(QWidget):
 
 
 class SidebarPanel(QWidget):
-    """Collapsible left panel showing session history and settings access."""
+    """Left panel showing session history and settings access."""
 
     settings_requested = Signal()
-    collapse_toggled = Signal(bool)  # emits True when collapsed
     session_selected = Signal(str)  # session id
     new_session_requested = Signal()
     delete_session_requested = Signal(str)  # session id
+    rename_session_requested = Signal(str)  # session id
 
     def __init__(self, store: SessionStore, parent=None):
         super().__init__(parent)
         self._store = store
-        self._collapsed = False
         self._active_session_id: str | None = None
         self.setMinimumWidth(180)
         self._setup_ui()
@@ -88,12 +94,6 @@ class SidebarPanel(QWidget):
         self._new_btn.setToolTip("New session")
         self._new_btn.clicked.connect(self.new_session_requested.emit)
         header_row.addWidget(self._new_btn)
-
-        self._collapse_btn = QPushButton("\u00ab")
-        self._collapse_btn.setFixedSize(28, 28)
-        self._collapse_btn.setToolTip("Collapse sidebar")
-        self._collapse_btn.clicked.connect(self.toggle_collapse)
-        header_row.addWidget(self._collapse_btn)
 
         layout.addLayout(header_row)
 
@@ -129,6 +129,7 @@ class SidebarPanel(QWidget):
                 start_time_str=meta["start_time"].strftime("%Y-%m-%d %H:%M"),
             )
             widget.delete_clicked.connect(self.delete_session_requested.emit)
+            widget.rename_clicked.connect(self.rename_session_requested.emit)
             self._session_list.setItemWidget(item, widget)
 
             if sid == (active_id or self._active_session_id):
@@ -158,28 +159,3 @@ class SidebarPanel(QWidget):
             self._active_session_id = sid
             self.session_selected.emit(sid)
 
-    def toggle_collapse(self):
-        self._collapsed = not self._collapsed
-        if self._collapsed:
-            self._sessions_label.hide()
-            self._new_btn.hide()
-            self._session_list.hide()
-            self._settings_btn.hide()
-            self._collapse_btn.setText("\u00bb")
-            self._collapse_btn.setToolTip("Expand sidebar")
-            self.setMinimumWidth(40)
-            self.setMaximumWidth(40)
-        else:
-            self._sessions_label.show()
-            self._new_btn.show()
-            self._session_list.show()
-            self._settings_btn.show()
-            self._collapse_btn.setText("\u00ab")
-            self._collapse_btn.setToolTip("Collapse sidebar")
-            self.setMinimumWidth(180)
-            self.setMaximumWidth(16777215)  # QWIDGETSIZE_MAX
-        self.collapse_toggled.emit(self._collapsed)
-
-    @property
-    def is_collapsed(self) -> bool:
-        return self._collapsed

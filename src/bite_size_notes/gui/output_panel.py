@@ -16,7 +16,7 @@ class OutputPanel(QWidget):
 
     bite_size_clicked = Signal()
     notes_toggled = Signal()
-    export_clicked = Signal()
+    export_output_clicked = Signal()
     collapse_toggled = Signal(bool)  # emits True when collapsed
 
     def __init__(self, parent=None):
@@ -35,26 +35,23 @@ class OutputPanel(QWidget):
         self._btn_row.setSpacing(4)
         self._btn_row.setAlignment(Qt.AlignmentFlag.AlignVCenter)
 
-        self._action_btns = []
-        for label in ("Bite Size It", "Tone", "Model"):
-            btn = QPushButton(label)
-            btn.setFixedHeight(28)
-            self._btn_row.addWidget(btn)
-            self._action_btns.append(btn)
-
-        self._action_btns[0].clicked.connect(self.bite_size_clicked.emit)
+        self._bite_size_btn = QPushButton("Bite Size It")
+        self._bite_size_btn.setFixedHeight(28)
+        self._btn_row.addWidget(self._bite_size_btn)
+        self._bite_size_btn.clicked.connect(self.bite_size_clicked.emit)
 
         self._copy_btn = QPushButton("\U0001f4cb")
         self._copy_btn.setObjectName("iconBtn")
         self._copy_btn.setFixedSize(28, 28)
         self._copy_btn.setToolTip("Copy")
+        self._copy_btn.clicked.connect(self._copy_to_clipboard)
         self._btn_row.addWidget(self._copy_btn)
 
         self._export_btn = QPushButton("\U0001f4e5")
         self._export_btn.setObjectName("iconBtn")
         self._export_btn.setFixedSize(28, 28)
-        self._export_btn.setToolTip("Export")
-        self._export_btn.clicked.connect(self.export_clicked.emit)
+        self._export_btn.setToolTip("Export output")
+        self._export_btn.clicked.connect(self.export_output_clicked.emit)
         self._btn_row.addWidget(self._export_btn)
 
         self._btn_row.addStretch()
@@ -90,8 +87,7 @@ class OutputPanel(QWidget):
     def toggle_collapse(self):
         self._collapsed = not self._collapsed
         if self._collapsed:
-            for btn in self._action_btns:
-                btn.hide()
+            self._bite_size_btn.hide()
             self._copy_btn.hide()
             self._export_btn.hide()
             self._text_edit.hide()
@@ -101,8 +97,7 @@ class OutputPanel(QWidget):
             self.setMinimumWidth(40)
             self.setMaximumWidth(40)
         else:
-            for btn in self._action_btns:
-                btn.show()
+            self._bite_size_btn.show()
             self._copy_btn.show()
             self._export_btn.show()
             self._text_edit.show()
@@ -122,6 +117,15 @@ class OutputPanel(QWidget):
 
     def set_text(self, text: str):
         self._text_edit.setPlainText(text)
+
+    def text(self) -> str:
+        return self._text_edit.toPlainText()
+
+    def _copy_to_clipboard(self):
+        from PySide6.QtWidgets import QApplication
+
+        clipboard = QApplication.clipboard()
+        clipboard.setText(self._text_edit.toPlainText())
 
     def clear(self):
         self._text_edit.clear()
