@@ -7,7 +7,8 @@ class AppConfig:
     """Persistent settings backed by QSettings."""
 
     def __init__(self):
-        self.settings = QSettings("BiteSize", "Bite-Size-Notes")
+        self.settings = QSettings("pcphil", "Bite-Size-Notes")
+        self._migrate_from_old_org()
 
     # --- Audio devices ---
 
@@ -66,3 +67,16 @@ class AppConfig:
         self.settings.setValue("summarization/model", value)
 
     # --- Recording ---
+
+    # --- Migration ---
+
+    def _migrate_from_old_org(self):
+        """One-time migration of settings from the old 'BiteSize' org name."""
+        if self.settings.allKeys():
+            return
+        old = QSettings("BiteSize", "Bite-Size-Notes")
+        if not old.allKeys():
+            return
+        for key in old.allKeys():
+            self.settings.setValue(key, old.value(key))
+        self.settings.sync()

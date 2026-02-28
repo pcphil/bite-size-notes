@@ -1,5 +1,7 @@
 """Persistent storage for transcript sessions as individual JSON files."""
 
+import shutil
+import sys
 from pathlib import Path
 
 from PySide6.QtCore import QStandardPaths
@@ -16,6 +18,7 @@ class SessionStore:
         )
         self._dir = Path(app_data) / "sessions"
         self._dir.mkdir(parents=True, exist_ok=True)
+        self._migrate_from_old_org()
 
     def list_sessions(self) -> list[dict]:
         """Return [{id, title, start_time}, ...] sorted by start_time descending."""
@@ -49,3 +52,23 @@ class SessionStore:
         path = self._dir / f"{session_id}.json"
         if path.exists():
             path.unlink()
+
+    def _migrate_from_old_org(self):
+        """One-time migration of session files from the old 'BiteSize' org dir."""
+        if sys.platform == "win32":
+            old_dir = Path.home() / "AppData/Local/BiteSize/Bite-Size-Notes/sessions"
+        elif sys.platform == "darwin":
+            old_dir = (
+                Path.home()
+                / "Library/Application Support/BiteSize/Bite-Size-Notes/sessions"
+            )
+        else:
+            old_dir = Path.home() / ".local/share/BiteSize/Bite-Size-Notes/sessions"
+
+        if not old_dir.is_dir():
+            return
+
+        for src in old_dir.glob("*.json"):
+            dst = self._dir / src.name
+            if not dst.exists():
+                shutil.move(str(src), str(dst))
