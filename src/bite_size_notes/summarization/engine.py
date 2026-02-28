@@ -1,5 +1,7 @@
 """Qwen3 4B GGUF summarization engine."""
 
+import re
+
 from huggingface_hub import hf_hub_download, try_to_load_from_cache
 from llama_cpp import Llama
 
@@ -52,9 +54,11 @@ def summarize(llm: Llama, transcript_text: str) -> str:
     response = llm.create_chat_completion(
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": transcript_text},
+            {"role": "user", "content": transcript_text + "\n/no_think"},
         ],
         max_tokens=512,
         temperature=0.7,
     )
-    return response["choices"][0]["message"]["content"]
+    content = response["choices"][0]["message"]["content"]
+    content = re.sub(r"<think>[\s\S]*?</think>", "", content).strip()
+    return content

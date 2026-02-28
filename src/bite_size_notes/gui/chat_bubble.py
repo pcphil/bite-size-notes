@@ -72,7 +72,7 @@ class TranscriptLineWidget(QFrame):
 
         self.setObjectName("transcriptLine")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
-        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
         inner = QVBoxLayout(self)
         inner.setContentsMargins(10, 6, 10, 6)
