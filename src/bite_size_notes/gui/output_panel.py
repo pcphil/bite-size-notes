@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 class OutputPanel(QWidget):
     """Panel for displaying output content alongside the transcript."""
 
+    bite_size_clicked = Signal()
     notes_toggled = Signal()
     export_clicked = Signal()
     collapse_toggled = Signal(bool)  # emits True when collapsed
@@ -40,6 +41,8 @@ class OutputPanel(QWidget):
             btn.setFixedHeight(28)
             self._btn_row.addWidget(btn)
             self._action_btns.append(btn)
+
+        self._action_btns[0].clicked.connect(self.bite_size_clicked.emit)
 
         self._copy_btn = QPushButton("\U0001f4cb")
         self._copy_btn.setObjectName("iconBtn")

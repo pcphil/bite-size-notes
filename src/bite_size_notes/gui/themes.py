@@ -85,7 +85,7 @@ def build_stylesheet(p: dict[str, Any]) -> str:
     QMainWindow, QWidget#centralWidget {{
         background-color: {p["bg_primary"]};
     }}
-    QWidget {{
+    QMainWindow, QDialog, QFrame, QScrollArea, #centralWidget, #transcriptContainer {{
         background-color: {p["bg_primary"]};
         color: {p["text"]};
     }}
@@ -233,6 +233,9 @@ def build_stylesheet(p: dict[str, Any]) -> str:
     SidebarPanel QListWidget::item:hover {{
         background-color: {p["item_hover_bg"]};
     }}
+    SidebarPanel #sessionDate {{
+        color: {p["muted_text"]};
+    }}
 
     /* === Output panel === */
     OutputPanel {{
@@ -287,58 +290,38 @@ def build_stylesheet(p: dict[str, Any]) -> str:
         background-color: {p["btn_hover"]};
     }}
 
-    /* === Chat bubble — "Me" === */
-    #chatBubbleMe {{
-        background-color: {p["bubble_me_bg"]};
-        border-radius: 12px;
-        padding: 4px;
+    /* === Transcript line === */
+    #transcriptLine {{
+        background-color: {p["bg_primary"]};
+        border: none;
+        padding: 2px 0;
     }}
-    #chatBubbleMe QPlainTextEdit {{
-        background: transparent;
+    #transcriptLine QLabel {{
+        background-color: transparent;
+    }}
+    #transcriptLine QPlainTextEdit {{
+        background-color: {p["bg_primary"]};
         color: {p["text"]};
         border: none;
         padding: 0px;
     }}
-    #chatBubbleMe QPushButton {{
-        background: transparent;
+    #transcriptLine QPushButton {{
+        background-color: transparent;
         color: {p["muted_text"]};
         border: none;
         font-size: 14px;
         font-weight: bold;
     }}
-    #chatBubbleMe QPushButton:hover {{
+    #transcriptLine QPushButton:hover {{
         color: {p["delete_hover"]};
     }}
-    #bubbleHeaderMe {{
+    #speakerMe {{
         color: {p["bubble_me_color"]};
-        background: transparent;
+        background-color: transparent;
     }}
-
-    /* === Chat bubble — "Others" === */
-    #chatBubbleOthers {{
-        background-color: {p["bubble_others_bg"]};
-        border-radius: 12px;
-        padding: 4px;
-    }}
-    #chatBubbleOthers QPlainTextEdit {{
-        background: transparent;
-        color: {p["text"]};
-        border: none;
-        padding: 0px;
-    }}
-    #chatBubbleOthers QPushButton {{
-        background: transparent;
-        color: {p["muted_text"]};
-        border: none;
-        font-size: 14px;
-        font-weight: bold;
-    }}
-    #chatBubbleOthers QPushButton:hover {{
-        color: {p["delete_hover"]};
-    }}
-    #bubbleHeaderOthers {{
+    #speakerOthers {{
         color: {p["bubble_others_color"]};
-        background: transparent;
+        background-color: transparent;
     }}
 
     /* === Notes panel === */

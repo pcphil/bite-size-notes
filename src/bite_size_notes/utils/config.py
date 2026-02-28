@@ -55,6 +55,14 @@ class AppConfig:
     def theme(self, value: str):
         self.settings.setValue("appearance/theme", value)
 
+    # --- Summarization ---
+
+    @property
+    def summarizer_model(self) -> str:
+        return str(self.settings.value("summarization/model", "Qwen3-4B-Q4_K_M"))
+
+    @summarizer_model.setter
+    def summarizer_model(self, value: str):
+        self.settings.setValue("summarization/model", value)
+
     # --- Recording ---
-
-

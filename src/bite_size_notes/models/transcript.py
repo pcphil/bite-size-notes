@@ -3,6 +3,8 @@
 import json
 from dataclasses import dataclass, field
 from datetime import datetime
+from pathlib import Path
+from uuid import uuid4
 
 
 @dataclass
@@ -31,6 +33,12 @@ class TranscriptSession:
 
     segments: list[TranscriptSegment] = field(default_factory=list)
     start_time: datetime = field(default_factory=datetime.now)
+    id: str = field(default_factory=lambda: str(uuid4()))
+    title: str = ""
+
+    def __post_init__(self):
+        if not self.title:
+            self.title = f"Meeting — {self.start_time.strftime('%Y-%m-%d %H:%M')}"
 
     def add_segment(self, segment: TranscriptSegment):
         self.segments.append(segment)
@@ -38,6 +46,54 @@ class TranscriptSession:
     def clear(self):
         self.segments.clear()
         self.start_time = datetime.now()
+        self.id = str(uuid4())
+        self.title = f"Meeting — {self.start_time.strftime('%Y-%m-%d %H:%M')}"
+
+    def to_dict(self) -> dict:
+        """Serialize the session to a dictionary."""
+        return {
+            "id": self.id,
+            "title": self.title,
+            "start_time": self.start_time.isoformat(),
+            "segments": [
+                {
+                    "text": seg.text,
+                    "source": seg.source,
+                    "timestamp": seg.timestamp,
+                    "speaker_label": seg.speaker_label,
+                }
+                for seg in self.segments
+            ],
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "TranscriptSession":
+        """Reconstruct a session from a dictionary."""
+        segments = [
+            TranscriptSegment(
+                text=s["text"],
+                source=s["source"],
+                timestamp=s["timestamp"],
+                speaker_label=s.get("speaker_label", ""),
+            )
+            for s in data.get("segments", [])
+        ]
+        return cls(
+            segments=segments,
+            start_time=datetime.fromisoformat(data["start_time"]),
+            id=data["id"],
+            title=data.get("title", ""),
+        )
+
+    def save(self, path: Path) -> None:
+        """Write the session as JSON to the given path."""
+        path.write_text(json.dumps(self.to_dict(), indent=2), encoding="utf-8")
+
+    @classmethod
+    def load(cls, path: Path) -> "TranscriptSession":
+        """Read a session from a JSON file."""
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return cls.from_dict(data)
 
     def to_text(self) -> str:
         lines = []
@@ -63,7 +119,7 @@ class TranscriptSession:
 
     def to_markdown(self) -> str:
         lines = [
-            f"# Meeting Transcript",
+            "# Meeting Transcript",
             f"**Date**: {self.start_time.strftime('%Y-%m-%d %H:%M')}",
             "",
             "---",
@@ -75,20 +131,7 @@ class TranscriptSession:
         return "\n".join(lines)
 
     def to_json(self) -> str:
-        data = {
-            "start_time": self.start_time.isoformat(),
-            "segments": [
-                {
-                    "text": seg.text,
-                    "source": seg.source,
-                    "timestamp": seg.timestamp,
-                    "speaker_label": seg.label,
-                    "time_str": seg.time_str,
-                }
-                for seg in self.segments
-            ],
-        }
-        return json.dumps(data, indent=2)
+        return json.dumps(self.to_dict(), indent=2)
 
 
 def _srt_time(seconds: float) -> str:
