@@ -4,7 +4,7 @@ import queue
 import time
 
 from PySide6.QtCore import QThread, QTimer, Qt, Signal
-from PySide6.QtGui import QKeySequence, QShortcut
+from PySide6.QtGui import QFont, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QInputDialog,
     QLabel,
@@ -148,10 +148,7 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(self._splitter, 1)
 
-        # Connect sidebar collapse to redistribute splitter space
-        self._saved_splitter_sizes = self._splitter.sizes()
         self._saved_output_sizes = self._splitter.sizes()
-        self.sidebar.collapse_toggled.connect(self._on_sidebar_collapse_toggled)
 
         # Connect transcript view control signals
         self.transcript_view.record_clicked.connect(self._on_record_clicked)
@@ -163,6 +160,7 @@ class MainWindow(QMainWindow):
         self.output_panel.export_output_clicked.connect(self._on_export_output_clicked)
         self.output_panel.collapse_toggled.connect(self._on_output_collapse_toggled)
         self.output_panel.bite_size_clicked.connect(self._on_bite_size_clicked)
+        self._splitter.splitterMoved.connect(self._on_splitter_moved)
 
         # Connect sidebar rename signal
         self.sidebar.rename_session_requested.connect(self._on_rename_session)
@@ -201,6 +199,10 @@ class MainWindow(QMainWindow):
         self.loopback_level.setFormat("Sys")
         self.loopback_level.setTextVisible(True)
         self.statusBar().addPermanentWidget(self.loopback_level)
+
+        author_label = QLabel("By Philip Chung")
+        author_label.setFont(QFont("Segoe UI", 8))
+        self.statusBar().addPermanentWidget(author_label)
 
     def _setup_timers(self):
         # Timer to update duration and audio levels
@@ -400,6 +402,9 @@ class MainWindow(QMainWindow):
             return
 
         text = self.transcript_session.to_text()
+        notes = self.notes_panel.get_text().strip()
+        if notes:
+            text += f"\n\nNotes:\n{notes}"
         if not text.strip():
             QMessageBox.information(
                 self, "No Transcript", "There is no transcript to summarize."
@@ -462,6 +467,7 @@ class MainWindow(QMainWindow):
         if self.transcript_session.segments:
             self.session_store.save_session(self.transcript_session)
         self.transcript_session = TranscriptSession()
+        self.session_store.save_session(self.transcript_session)
         self.transcript_view.clear_transcript()
         self.transcript_view.set_editable(False)
         self.notes_panel.clear()
@@ -514,16 +520,9 @@ class MainWindow(QMainWindow):
             self.notes_panel.show()
             self.notes_panel.raise_()
 
-    def _on_sidebar_collapse_toggled(self, collapsed: bool):
-        """Redistribute splitter space when the sidebar collapses/expands."""
-        sizes = self._splitter.sizes()
-        total = sum(sizes)
-        if collapsed:
-            self._saved_splitter_sizes = sizes
-            self._splitter.setSizes([40, total - 40 - sizes[2], sizes[2]])
-        else:
-            # Restore previous proportions
-            self._splitter.setSizes(self._saved_splitter_sizes)
+    def _on_splitter_moved(self):
+        """Refresh bubble heights after the user drags the splitter."""
+        QTimer.singleShot(0, self.transcript_view._refresh_bubble_heights)
 
     def _on_output_collapse_toggled(self, collapsed: bool):
         """Redistribute splitter space when the output panel collapses/expands."""

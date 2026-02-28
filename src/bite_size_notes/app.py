@@ -13,8 +13,8 @@ from bite_size_notes.utils.config import AppConfig
 
 def main():
     app = QApplication(sys.argv)
-    app.setApplicationName("Bite-Size Notes")
-    app.setOrganizationName("BiteSize")
+    app.setApplicationName("Bite-Size Notes - The Personal Transcription Assistant")
+    app.setOrganizationName("pcphil")
 
     # Apply theme
     config = AppConfig()

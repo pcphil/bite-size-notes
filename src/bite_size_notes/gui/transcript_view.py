@@ -76,6 +76,10 @@ class TranscriptView(QWidget):
     def resizeEvent(self, event):
         """Propagate width changes to bubbles so text re-wraps."""
         super().resizeEvent(event)
+        QTimer.singleShot(0, self._refresh_bubble_heights)
+
+    def _refresh_bubble_heights(self):
+        """Recalculate heights for all bubbles after layout changes."""
         for bubble in self._bubbles:
             bubble._text_edit._adjust_height()
 

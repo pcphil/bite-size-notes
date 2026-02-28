@@ -44,6 +44,7 @@ class OutputPanel(QWidget):
         self._copy_btn.setObjectName("iconBtn")
         self._copy_btn.setFixedSize(28, 28)
         self._copy_btn.setToolTip("Copy")
+        self._copy_btn.clicked.connect(self._copy_to_clipboard)
         self._btn_row.addWidget(self._copy_btn)
 
         self._export_btn = QPushButton("\U0001f4e5")
@@ -119,6 +120,12 @@ class OutputPanel(QWidget):
 
     def text(self) -> str:
         return self._text_edit.toPlainText()
+
+    def _copy_to_clipboard(self):
+        from PySide6.QtWidgets import QApplication
+
+        clipboard = QApplication.clipboard()
+        clipboard.setText(self._text_edit.toPlainText())
 
     def clear(self):
         self._text_edit.clear()

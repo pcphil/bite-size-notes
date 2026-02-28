@@ -1,6 +1,6 @@
 """Transcript line widget for displaying a single transcript segment."""
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QFont, QTextOption
 from PySide6.QtWidgets import (
     QFrame,
@@ -41,7 +41,7 @@ class _AutoResizePlainTextEdit(QPlainTextEdit):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
-        self._adjust_height()
+        QTimer.singleShot(0, self._adjust_height)
 
     def showEvent(self, event):
         super().showEvent(event)
