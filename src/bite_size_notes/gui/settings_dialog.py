@@ -18,6 +18,10 @@ from bite_size_notes.audio.devices import (
     list_loopback_devices,
 )
 from bite_size_notes.gui.themes import get_palette
+from bite_size_notes.summarization.engine import (
+    download_summarizer_sync,
+    is_summarizer_cached,
+)
 from bite_size_notes.transcription.model_utils import (
     download_model_sync,
     is_model_cached,
@@ -43,6 +47,20 @@ class _ModelDownloadThread(QThread):
             self.error.emit(str(exc))
 
 
+class _SummarizerDownloadThread(QThread):
+    """Background thread that downloads the summarizer model."""
+
+    finished = Signal(str)
+    error = Signal(str)
+
+    def run(self):
+        try:
+            path = download_summarizer_sync()
+            self.finished.emit(path)
+        except Exception as exc:
+            self.error.emit(str(exc))
+
+
 class SettingsDialog(QDialog):
     """Dialog for configuring audio devices and transcription settings."""
 
@@ -63,6 +81,7 @@ class SettingsDialog(QDialog):
         super().__init__(parent)
         self.config = config
         self._download_thread: _ModelDownloadThread | None = None
+        self._summarizer_dl_thread: _SummarizerDownloadThread | None = None
         self.setWindowTitle("Settings")
         self.setMinimumWidth(400)
         self._setup_ui()
@@ -137,6 +156,22 @@ class SettingsDialog(QDialog):
         trans_group.setLayout(trans_layout)
         layout.addWidget(trans_group)
 
+        # --- Summarizer Model ---
+        summ_group = QGroupBox("Summarizer Model")
+        summ_layout = QFormLayout()
+
+        summ_dl_row = QHBoxLayout()
+        self._summ_status = QLabel()
+        summ_dl_row.addWidget(self._summ_status)
+        summ_dl_row.addStretch()
+        self._summ_download_btn = QPushButton("Download Model")
+        self._summ_download_btn.clicked.connect(self._start_summarizer_download)
+        summ_dl_row.addWidget(self._summ_download_btn)
+        summ_layout.addRow("Qwen3 4B:", summ_dl_row)
+
+        summ_group.setLayout(summ_layout)
+        layout.addWidget(summ_group)
+
         # --- Buttons ---
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
@@ -182,6 +217,41 @@ class SettingsDialog(QDialog):
         self._model_status.setStyleSheet(f"color: {p['status_red']}; font-weight: bold;")
         self._download_btn.setEnabled(True)
 
+    def _update_summarizer_status(self):
+        """Check whether the summarizer model is cached and update the label."""
+        p = get_palette(self.config.theme)
+        if is_summarizer_cached():
+            self._summ_status.setText("Ready")
+            self._summ_status.setStyleSheet(f"color: {p['status_green']}; font-weight: bold;")
+            self._summ_download_btn.setEnabled(False)
+        else:
+            self._summ_status.setText("Not downloaded")
+            self._summ_status.setStyleSheet(f"color: {p['status_orange']}; font-weight: bold;")
+            self._summ_download_btn.setEnabled(True)
+
+    def _start_summarizer_download(self):
+        """Download the summarizer model in a background thread."""
+        p = get_palette(self.config.theme)
+        self._summ_download_btn.setEnabled(False)
+        self._summ_status.setText("Downloading...")
+        self._summ_status.setStyleSheet(f"color: {p['status_gray']}; font-weight: bold;")
+
+        self._summarizer_dl_thread = _SummarizerDownloadThread(self)
+        self._summarizer_dl_thread.finished.connect(self._on_summarizer_dl_finished)
+        self._summarizer_dl_thread.error.connect(self._on_summarizer_dl_error)
+        self._summarizer_dl_thread.start()
+
+    def _on_summarizer_dl_finished(self, _path: str):
+        self._summarizer_dl_thread = None
+        self._update_summarizer_status()
+
+    def _on_summarizer_dl_error(self, message: str):
+        p = get_palette(self.config.theme)
+        self._summarizer_dl_thread = None
+        self._summ_status.setText("Download failed")
+        self._summ_status.setStyleSheet(f"color: {p['status_red']}; font-weight: bold;")
+        self._summ_download_btn.setEnabled(True)
+
     def _refresh_devices(self):
         """Re-enumerate audio devices."""
         self.mic_combo.clear()
@@ -226,6 +296,7 @@ class SettingsDialog(QDialog):
 
         # Initial model status check
         self._update_model_status()
+        self._update_summarizer_status()
 
     def _save_and_accept(self):
         self.config.theme = self.theme_combo.currentData()

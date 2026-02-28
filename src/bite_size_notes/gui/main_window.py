@@ -24,7 +24,13 @@ from bite_size_notes.gui.output_panel import OutputPanel
 from bite_size_notes.gui.settings_dialog import SettingsDialog
 from bite_size_notes.gui.sidebar_panel import SidebarPanel
 from bite_size_notes.gui.transcript_view import TranscriptView
+from bite_size_notes.models.session_store import SessionStore
 from bite_size_notes.models.transcript import TranscriptSegment, TranscriptSession
+from bite_size_notes.summarization.engine import (
+    is_summarizer_cached,
+    load_summarizer,
+    summarize,
+)
 from bite_size_notes.transcription.engine import TranscriptionEngine
 from bite_size_notes.transcription.model_utils import is_model_cached
 from bite_size_notes.transcription.worker import TranscriberWorker
@@ -54,6 +60,25 @@ class _ModelPreloadThread(QThread):
             self.error.emit(str(exc))
 
 
+class _SummarizeThread(QThread):
+    """Background thread that runs summarization on transcript text."""
+
+    finished = Signal(str)
+    error = Signal(str)
+
+    def __init__(self, transcript_text: str, parent=None):
+        super().__init__(parent)
+        self._text = transcript_text
+
+    def run(self):
+        try:
+            llm = load_summarizer()
+            result = summarize(llm, self._text)
+            self.finished.emit(result)
+        except Exception as exc:
+            self.error.emit(str(exc))
+
+
 class MainWindow(QMainWindow):
     def __init__(self, app=None):
         super().__init__()
@@ -63,6 +88,7 @@ class MainWindow(QMainWindow):
 
         self.config = AppConfig()
         self.audio_queue: queue.Queue = queue.Queue(maxsize=100)
+        self.session_store = SessionStore()
         self.transcript_session = TranscriptSession()
 
         self.capture_thread: AudioCaptureThread | None = None
@@ -72,10 +98,14 @@ class MainWindow(QMainWindow):
 
         self._preloaded_engine: TranscriptionEngine | None = None
         self._preload_thread: _ModelPreloadThread | None = None
+        self._summarize_thread: _SummarizeThread | None = None
 
         self._setup_ui()
         self._setup_status_bar()
         self._setup_timers()
+
+        # Populate sidebar with saved sessions
+        self.sidebar.refresh_sessions(active_id=self.transcript_session.id)
 
         # Preload the model on startup if it's already downloaded
         if is_model_cached(self.config.model_size):
@@ -92,8 +122,11 @@ class MainWindow(QMainWindow):
         self._splitter = QSplitter(Qt.Orientation.Horizontal)
 
         # Left: sidebar
-        self.sidebar = SidebarPanel()
+        self.sidebar = SidebarPanel(self.session_store)
         self.sidebar.settings_requested.connect(self._on_settings_clicked)
+        self.sidebar.session_selected.connect(self._on_session_selected)
+        self.sidebar.new_session_requested.connect(self._on_new_session)
+        self.sidebar.delete_session_requested.connect(self._on_delete_session)
         self._splitter.addWidget(self.sidebar)
 
         # Center: transcript
@@ -127,6 +160,7 @@ class MainWindow(QMainWindow):
         self.output_panel.notes_toggled.connect(self._toggle_notes)
         self.output_panel.export_clicked.connect(self._on_export_clicked)
         self.output_panel.collapse_toggled.connect(self._on_output_collapse_toggled)
+        self.output_panel.bite_size_clicked.connect(self._on_bite_size_clicked)
 
         self.setCentralWidget(central)
 
@@ -315,6 +349,11 @@ class MainWindow(QMainWindow):
         self.mic_level.setValue(0)
         self.loopback_level.setValue(0)
 
+        # Auto-save session if it has content
+        if self.transcript_session.segments:
+            self.session_store.save_session(self.transcript_session)
+            self.sidebar.refresh_sessions(active_id=self.transcript_session.id)
+
     def _on_transcription(self, speaker: str, timestamp: float, text: str):
         """Slot: new transcription segment received."""
         segment = TranscriptSegment(
@@ -340,6 +379,42 @@ class MainWindow(QMainWindow):
         self.transcript_view.clear_transcript()
         self.notes_panel.clear()
 
+    def _on_bite_size_clicked(self):
+        """Handle the Bite Size It button click."""
+        if not is_summarizer_cached():
+            QMessageBox.warning(
+                self,
+                "Summarizer Not Downloaded",
+                "The Qwen3 summarizer model is not downloaded yet.\n\n"
+                "Please open Settings and click 'Download Model' in the "
+                "Summarizer Model section.",
+            )
+            return
+
+        text = self.transcript_session.to_text()
+        if not text.strip():
+            QMessageBox.information(
+                self, "No Transcript", "There is no transcript to summarize."
+            )
+            return
+
+        if self._summarize_thread is not None:
+            return  # already running
+
+        self.output_panel.set_text("Summarizing...")
+        self._summarize_thread = _SummarizeThread(text, self)
+        self._summarize_thread.finished.connect(self._on_summarize_finished)
+        self._summarize_thread.error.connect(self._on_summarize_error)
+        self._summarize_thread.start()
+
+    def _on_summarize_finished(self, result: str):
+        self._summarize_thread = None
+        self.output_panel.set_text(result)
+
+    def _on_summarize_error(self, message: str):
+        self._summarize_thread = None
+        self.output_panel.set_text(f"Summarization failed: {message}")
+
     def _on_bubble_text_edited(self, index: int, new_text: str):
         """Sync an edited bubble's text back to the transcript session."""
         if 0 <= index < len(self.transcript_session.segments):
@@ -349,6 +424,51 @@ class MainWindow(QMainWindow):
         """Remove a segment from the transcript session."""
         if 0 <= index < len(self.transcript_session.segments):
             self.transcript_session.segments.pop(index)
+
+    def _on_session_selected(self, session_id: str):
+        """Load a previously-saved session into the transcript view."""
+        if self.is_recording:
+            return
+        try:
+            session = self.session_store.load_session(session_id)
+        except Exception:
+            return
+        self.transcript_session = session
+        self.transcript_view.clear_transcript()
+        for segment in session.segments:
+            self.transcript_view.append_segment(segment)
+        self.transcript_view.set_editable(True)
+        self.sidebar.set_active_session(session_id)
+
+    def _on_new_session(self):
+        """Save current session (if non-empty) and start a fresh one."""
+        if self.is_recording:
+            return
+        if self.transcript_session.segments:
+            self.session_store.save_session(self.transcript_session)
+        self.transcript_session = TranscriptSession()
+        self.transcript_view.clear_transcript()
+        self.transcript_view.set_editable(False)
+        self.notes_panel.clear()
+        self.sidebar.refresh_sessions(active_id=self.transcript_session.id)
+
+    def _on_delete_session(self, session_id: str):
+        """Delete a session after confirmation."""
+        reply = QMessageBox.question(
+            self,
+            "Delete Session",
+            "Are you sure you want to delete this session?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        self.session_store.delete_session(session_id)
+        # If the deleted session is the current one, start fresh
+        if session_id == self.transcript_session.id:
+            self.transcript_session = TranscriptSession()
+            self.transcript_view.clear_transcript()
+            self.notes_panel.clear()
+        self.sidebar.refresh_sessions(active_id=self.transcript_session.id)
 
     def _toggle_notes(self):
         if self.notes_panel.isVisible():
@@ -411,7 +531,10 @@ class MainWindow(QMainWindow):
                 self._app.setStyleSheet(
                     build_stylesheet(get_palette(self.config.theme))
                 )
-            if self.config.model_size != old_model or self.config.language != old_language:
+            if (
+                self.config.model_size != old_model
+                or self.config.language != old_language
+            ):
                 self._preloaded_engine = None
                 if is_model_cached(self.config.model_size):
                     self._preload_model()
@@ -434,7 +557,9 @@ class MainWindow(QMainWindow):
                 self.loopback_level.setValue(lb_pct)
 
     def closeEvent(self, event):
-        """Clean up threads on window close."""
+        """Clean up threads on window close and save current session."""
         if self.is_recording:
             self._stop_recording()
+        if self.transcript_session.segments:
+            self.session_store.save_session(self.transcript_session)
         event.accept()

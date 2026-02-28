@@ -1,4 +1,4 @@
-"""Live transcript display as a scrollable list of chat bubbles."""
+"""Live transcript display as a scrollable list of text lines."""
 
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (
@@ -9,12 +9,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from bite_size_notes.gui.chat_bubble import ChatBubbleWidget
+from bite_size_notes.gui.chat_bubble import TranscriptLineWidget
 from bite_size_notes.models.transcript import TranscriptSegment
 
 
 class TranscriptView(QWidget):
-    """Center panel with control buttons and scrollable chat bubbles."""
+    """Center panel with control buttons and scrollable transcript lines."""
 
     text_edited = Signal(int, str)  # (segment_index, new_text)
     delete_requested = Signal(int)  # segment_index
@@ -60,13 +60,12 @@ class TranscriptView(QWidget):
         self._inner_layout = QVBoxLayout(self._container)
         self._inner_layout.setContentsMargins(0, 8, 0, 8)
         self._inner_layout.setSpacing(4)
-        self._inner_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         self._inner_layout.addStretch()
 
         self._scroll.setWidget(self._container)
         layout.addWidget(self._scroll, 1)
 
-        self._bubbles: list[ChatBubbleWidget] = []
+        self._bubbles: list[TranscriptLineWidget] = []
         self._editable = False
 
     def set_recording(self, recording: bool):
@@ -79,8 +78,8 @@ class TranscriptView(QWidget):
             self._record_btn.setToolTip("Record (Ctrl+R)")
 
     def append_segment(self, segment: TranscriptSegment):
-        """Add a new chat bubble for a transcript segment."""
-        bubble = ChatBubbleWidget(
+        """Add a new transcript line for a segment."""
+        bubble = TranscriptLineWidget(
             segment=segment,
             segment_index=len(self._bubbles),
             editable=self._editable,

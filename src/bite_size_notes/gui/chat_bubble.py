@@ -1,4 +1,4 @@
-"""Chat-bubble widget for displaying a single transcript segment."""
+"""Transcript line widget for displaying a single transcript segment."""
 
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont, QTextOption
@@ -41,13 +41,17 @@ class _AutoResizePlainTextEdit(QPlainTextEdit):
         super().resizeEvent(event)
         self._adjust_height()
 
+    def showEvent(self, event):
+        super().showEvent(event)
+        self._adjust_height()
+
     def focusOutEvent(self, event):
         super().focusOutEvent(event)
         self.focus_lost.emit()
 
 
-class ChatBubbleWidget(QFrame):
-    """A single chat-bubble representing one transcript segment."""
+class TranscriptLineWidget(QFrame):
+    """A single plain-text line representing one transcript segment."""
 
     text_edited = Signal(int, str)  # (segment_index, new_text)
     delete_requested = Signal(int)  # segment_index
@@ -66,10 +70,10 @@ class ChatBubbleWidget(QFrame):
         speaker = segment.speaker_label or segment.source
         is_me = speaker == "Me"
 
-        self.setObjectName("chatBubbleMe" if is_me else "chatBubbleOthers")
-        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Minimum)
+        self.setObjectName("transcriptLine")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
-        # Layout inside bubble
         inner = QVBoxLayout(self)
         inner.setContentsMargins(10, 6, 10, 6)
         inner.setSpacing(2)
@@ -79,7 +83,7 @@ class ChatBubbleWidget(QFrame):
         header_row.setContentsMargins(0, 0, 0, 0)
 
         header = QLabel(f"[{segment.time_str}] {speaker}")
-        header.setObjectName("bubbleHeaderMe" if is_me else "bubbleHeaderOthers")
+        header.setObjectName("speakerMe" if is_me else "speakerOthers")
         header.setFont(QFont("Consolas", 9))
         header_row.addWidget(header)
         header_row.addStretch()
@@ -103,11 +107,7 @@ class ChatBubbleWidget(QFrame):
         self._text_edit.focus_lost.connect(self._on_focus_lost)
         inner.addWidget(self._text_edit)
 
-        # Alignment via margins: "Me" pushed right, "Others" pushed left
-        if is_me:
-            self.setContentsMargins(40, 2, 8, 2)
-        else:
-            self.setContentsMargins(8, 2, 40, 2)
+        self.setContentsMargins(8, 2, 8, 2)
 
     def set_editable(self, editable: bool):
         self._text_edit.setReadOnly(not editable)
