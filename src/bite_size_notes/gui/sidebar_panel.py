@@ -18,9 +18,10 @@ _ROLE_SESSION_ID = Qt.ItemDataRole.UserRole
 
 
 class _SessionItemWidget(QWidget):
-    """Custom widget for a session list item with title, date, and delete button."""
+    """Custom widget for a session list item with title, date, and action buttons."""
 
     delete_clicked = Signal(str)  # session_id
+    rename_clicked = Signal(str)  # session_id
 
     def __init__(self, session_id: str, title: str, start_time_str: str, parent=None):
         super().__init__(parent)
@@ -45,6 +46,12 @@ class _SessionItemWidget(QWidget):
 
         layout.addLayout(info, 1)
 
+        rename_btn = QPushButton("\u270f")
+        rename_btn.setFixedSize(20, 20)
+        rename_btn.setToolTip("Rename session")
+        rename_btn.clicked.connect(lambda: self.rename_clicked.emit(self._session_id))
+        layout.addWidget(rename_btn)
+
         delete_btn = QPushButton("\u00d7")
         delete_btn.setFixedSize(20, 20)
         delete_btn.setToolTip("Delete session")
@@ -60,6 +67,7 @@ class SidebarPanel(QWidget):
     session_selected = Signal(str)  # session id
     new_session_requested = Signal()
     delete_session_requested = Signal(str)  # session id
+    rename_session_requested = Signal(str)  # session id
 
     def __init__(self, store: SessionStore, parent=None):
         super().__init__(parent)
@@ -129,6 +137,7 @@ class SidebarPanel(QWidget):
                 start_time_str=meta["start_time"].strftime("%Y-%m-%d %H:%M"),
             )
             widget.delete_clicked.connect(self.delete_session_requested.emit)
+            widget.rename_clicked.connect(self.rename_session_requested.emit)
             self._session_list.setItemWidget(item, widget)
 
             if sid == (active_id or self._active_session_id):

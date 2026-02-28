@@ -6,6 +6,7 @@ import time
 from PySide6.QtCore import QThread, QTimer, Qt, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
+    QInputDialog,
     QLabel,
     QMainWindow,
     QMessageBox,
@@ -18,7 +19,7 @@ from PySide6.QtWidgets import (
 from bite_size_notes.audio.capture import AudioCaptureThread
 from bite_size_notes.gui.themes import build_stylesheet, get_palette
 from bite_size_notes.audio.devices import get_default_mic, get_loopback_device
-from bite_size_notes.gui.export_dialog import export_transcript
+from bite_size_notes.gui.export_dialog import export_output, export_transcript
 from bite_size_notes.gui.notes_panel import NotesPanel
 from bite_size_notes.gui.output_panel import OutputPanel
 from bite_size_notes.gui.settings_dialog import SettingsDialog
@@ -155,12 +156,16 @@ class MainWindow(QMainWindow):
         # Connect transcript view control signals
         self.transcript_view.record_clicked.connect(self._on_record_clicked)
         self.transcript_view.clear_clicked.connect(self._on_clear_clicked)
+        self.transcript_view.export_clicked.connect(self._on_export_clicked)
 
         # Connect output panel signals
         self.output_panel.notes_toggled.connect(self._toggle_notes)
-        self.output_panel.export_clicked.connect(self._on_export_clicked)
+        self.output_panel.export_output_clicked.connect(self._on_export_output_clicked)
         self.output_panel.collapse_toggled.connect(self._on_output_collapse_toggled)
         self.output_panel.bite_size_clicked.connect(self._on_bite_size_clicked)
+
+        # Connect sidebar rename signal
+        self.sidebar.rename_session_requested.connect(self._on_rename_session)
 
         self.setCentralWidget(central)
 
@@ -374,6 +379,9 @@ class MainWindow(QMainWindow):
     def _on_export_clicked(self):
         export_transcript(self.transcript_session, self)
 
+    def _on_export_output_clicked(self):
+        export_output(self.output_panel.text(), self)
+
     def _on_clear_clicked(self):
         self.transcript_session.clear()
         self.transcript_view.clear_transcript()
@@ -410,6 +418,9 @@ class MainWindow(QMainWindow):
     def _on_summarize_finished(self, result: str):
         self._summarize_thread = None
         self.output_panel.set_text(result)
+        self.transcript_session.summary = result
+        if self.transcript_session.segments:
+            self.session_store.save_session(self.transcript_session)
 
     def _on_summarize_error(self, message: str):
         self._summarize_thread = None
@@ -438,6 +449,10 @@ class MainWindow(QMainWindow):
         for segment in session.segments:
             self.transcript_view.append_segment(segment)
         self.transcript_view.set_editable(True)
+        if session.summary:
+            self.output_panel.set_text(session.summary)
+        else:
+            self.output_panel.clear()
         self.sidebar.set_active_session(session_id)
 
     def _on_new_session(self):
@@ -450,6 +465,27 @@ class MainWindow(QMainWindow):
         self.transcript_view.clear_transcript()
         self.transcript_view.set_editable(False)
         self.notes_panel.clear()
+        self.output_panel.clear()
+        self.sidebar.refresh_sessions(active_id=self.transcript_session.id)
+
+    def _on_rename_session(self, session_id: str):
+        """Prompt the user to rename a session."""
+        try:
+            session = self.session_store.load_session(session_id)
+        except Exception:
+            return
+        new_name, ok = QInputDialog.getText(
+            self,
+            "Rename Session",
+            "New name:",
+            text=session.title,
+        )
+        if not ok or not new_name.strip():
+            return
+        session.title = new_name.strip()
+        self.session_store.save_session(session)
+        if session_id == self.transcript_session.id:
+            self.transcript_session.title = session.title
         self.sidebar.refresh_sessions(active_id=self.transcript_session.id)
 
     def _on_delete_session(self, session_id: str):

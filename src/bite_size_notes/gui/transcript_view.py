@@ -20,6 +20,7 @@ class TranscriptView(QWidget):
     delete_requested = Signal(int)  # segment_index
     record_clicked = Signal()
     clear_clicked = Signal()
+    export_clicked = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -45,15 +46,19 @@ class TranscriptView(QWidget):
         self._clear_btn.clicked.connect(self.clear_clicked.emit)
         btn_row.addWidget(self._clear_btn)
 
+        self._export_btn = QPushButton("\U0001f4e5")  # 📥 export icon
+        self._export_btn.setToolTip("Export transcript")
+        self._export_btn.setFixedSize(32, 32)
+        self._export_btn.clicked.connect(self.export_clicked.emit)
+        btn_row.addWidget(self._export_btn)
+
         btn_row.addStretch()
         layout.addLayout(btn_row)
 
         # --- Scrollable transcript area ---
         self._scroll = QScrollArea()
         self._scroll.setWidgetResizable(True)
-        self._scroll.setHorizontalScrollBarPolicy(
-            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
-        )
+        self._scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
         self._container = QWidget()
         self._container.setObjectName("transcriptContainer")

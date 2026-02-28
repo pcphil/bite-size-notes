@@ -18,7 +18,8 @@
       "Bash(cd /c/Users/chung/projects/bite-size-notes && .venv/Scripts/python.exe -m pytest 2>&1)",
       "Bash(cd /c/Users/chung/projects/bite-size-notes && .venv/Scripts/ruff.exe check src/ 2>&1)",
       "Bash(uv run:*)",
-      "Bash(uv:*)"
+      "Bash(uv:*)",
+      "Bash(rm:*)"
     ]
   }
 }

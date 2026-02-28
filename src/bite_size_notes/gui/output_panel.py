@@ -16,7 +16,7 @@ class OutputPanel(QWidget):
 
     bite_size_clicked = Signal()
     notes_toggled = Signal()
-    export_clicked = Signal()
+    export_output_clicked = Signal()
     collapse_toggled = Signal(bool)  # emits True when collapsed
 
     def __init__(self, parent=None):
@@ -53,8 +53,8 @@ class OutputPanel(QWidget):
         self._export_btn = QPushButton("\U0001f4e5")
         self._export_btn.setObjectName("iconBtn")
         self._export_btn.setFixedSize(28, 28)
-        self._export_btn.setToolTip("Export")
-        self._export_btn.clicked.connect(self.export_clicked.emit)
+        self._export_btn.setToolTip("Export output")
+        self._export_btn.clicked.connect(self.export_output_clicked.emit)
         self._btn_row.addWidget(self._export_btn)
 
         self._btn_row.addStretch()
@@ -122,6 +122,9 @@ class OutputPanel(QWidget):
 
     def set_text(self, text: str):
         self._text_edit.setPlainText(text)
+
+    def text(self) -> str:
+        return self._text_edit.toPlainText()
 
     def clear(self):
         self._text_edit.clear()
