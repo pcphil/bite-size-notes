@@ -1,10 +1,13 @@
 """Audio device enumeration with platform-specific loopback support."""
 
+import logging
 from dataclasses import dataclass
 
 import sounddevice as sd
 
 from bite_size_notes.utils.platform import is_macos, is_windows
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -29,6 +32,7 @@ def list_input_devices() -> list[AudioDevice]:
                     default_samplerate=d["default_samplerate"],
                 )
             )
+    logger.info("Found %d input devices", len(devices))
     return devices
 
 
@@ -37,13 +41,16 @@ def get_default_mic() -> AudioDevice | None:
     try:
         info = sd.query_devices(kind="input")
         idx = sd.default.device[0]
-        return AudioDevice(
+        device = AudioDevice(
             index=idx,
             name=info["name"],
             max_input_channels=info["max_input_channels"],
             default_samplerate=info["default_samplerate"],
         )
+        logger.info("Default mic: %s (index %d)", device.name, device.index)
+        return device
     except Exception:
+        logger.warning("No default mic found")
         return None
 
 

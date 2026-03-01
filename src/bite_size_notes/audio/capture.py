@@ -1,5 +1,6 @@
 """Audio capture thread with dual-stream mic + loopback support."""
 
+import logging
 import queue
 import threading
 import time
@@ -9,6 +10,8 @@ import numpy as np
 import sounddevice as sd
 
 from bite_size_notes.utils.platform import is_windows
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -59,6 +62,11 @@ class AudioCaptureThread(threading.Thread):
         self.loopback_rms: float = 0.0
 
     def run(self):
+        logger.info(
+            "Audio capture starting (mic=%s, loopback=%s)",
+            self.mic_device_index,
+            self.loopback_device_index,
+        )
         self._start_time = time.monotonic()
         streams = []
 
@@ -74,7 +82,9 @@ class AudioCaptureThread(threading.Thread):
             )
             mic_stream.start()
             streams.append(mic_stream)
+            logger.info("Mic stream opened (device %s)", self.mic_device_index)
         except Exception as e:
+            logger.error("Mic stream error: %s", e)
             self._push_error(f"Mic stream error: {e}")
             return
 
@@ -96,6 +106,7 @@ class AudioCaptureThread(threading.Thread):
                     loopback_stream.start()
                     streams.append(loopback_stream)
             except Exception as e:
+                logger.error("Loopback stream error: %s", e)
                 self._push_error(f"Loopback stream error: {e}")
 
         # --- Silence-based accumulation loop ---
@@ -153,6 +164,7 @@ class AudioCaptureThread(threading.Thread):
 
             # Push chunks to queue
             if mic_data is not None and len(mic_data) > self.SAMPLE_RATE:
+                logger.debug("Flushing mic chunk (%.1fs audio)", len(mic_data) / self.SAMPLE_RATE)
                 self._safe_put(
                     AudioChunk(
                         data=mic_data,
@@ -162,6 +174,7 @@ class AudioCaptureThread(threading.Thread):
                 )
 
             if loopback_data is not None and len(loopback_data) > self.SAMPLE_RATE:
+                logger.debug("Flushing loopback chunk (%.1fs audio)", len(loopback_data) / self.SAMPLE_RATE)
                 self._safe_put(
                     AudioChunk(
                         data=loopback_data,
@@ -276,4 +289,5 @@ class AudioCaptureThread(threading.Thread):
 
     def stop(self):
         """Signal the capture thread to stop."""
+        logger.info("Audio capture stopping")
         self._stop_event.set()

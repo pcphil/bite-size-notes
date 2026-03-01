@@ -1,9 +1,12 @@
 """Qwen3 4B GGUF summarization engine."""
 
+import logging
 import re
 
 from huggingface_hub import hf_hub_download, try_to_load_from_cache
 from llama_cpp import Llama
+
+logger = logging.getLogger(__name__)
 
 REPO_ID = "unsloth/Qwen3-4B-GGUF"
 FILENAME = "Qwen3-4B-Q4_K_M.gguf"
@@ -35,22 +38,31 @@ SYSTEM_PROMPT = (
 def is_summarizer_cached() -> bool:
     """Check whether the GGUF model file is already in the HF cache."""
     result = try_to_load_from_cache(REPO_ID, FILENAME)
-    return isinstance(result, str)
+    cached = isinstance(result, str)
+    logger.info("Summarizer model cached: %s", cached)
+    return cached
 
 
 def download_summarizer_sync() -> str:
     """Download the GGUF model file and return the cached path."""
-    return hf_hub_download(repo_id=REPO_ID, filename=FILENAME)
+    logger.info("Downloading summarizer model %s/%s", REPO_ID, FILENAME)
+    path = hf_hub_download(repo_id=REPO_ID, filename=FILENAME)
+    logger.info("Summarizer model path: %s", path)
+    return path
 
 
 def load_summarizer() -> Llama:
     """Load the Qwen3 4B GGUF model, downloading if necessary."""
     path = download_summarizer_sync()
-    return Llama(model_path=path, n_ctx=2048, verbose=False)
+    logger.info("Loading Llama model from %s", path)
+    llm = Llama(model_path=path, n_ctx=2048, verbose=False)
+    logger.info("Llama model loaded")
+    return llm
 
 
 def summarize(llm: Llama, transcript_text: str) -> str:
     """Run summarization on the given transcript text."""
+    logger.info("Sending summarization request")
     response = llm.create_chat_completion(
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
@@ -61,4 +73,5 @@ def summarize(llm: Llama, transcript_text: str) -> str:
     )
     content = response["choices"][0]["message"]["content"]
     content = re.sub(r"<think>[\s\S]*?</think>", "", content).strip()
+    logger.info("Summarization response received")
     return content
