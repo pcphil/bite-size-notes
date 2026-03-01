@@ -346,7 +346,7 @@ class MainWindow(QMainWindow):
 
         if self.capture_thread is not None:
             self.capture_thread.stop()
-            self.capture_thread.join(timeout=3.0)
+            self.capture_thread.join(timeout=5.0)
             self.capture_thread = None
 
         if self.transcriber_worker is not None:

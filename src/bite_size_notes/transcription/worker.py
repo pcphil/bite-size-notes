@@ -51,18 +51,16 @@ class TranscriberWorker(QThread):
                 self.error_occurred.emit(f"Failed to load model: {e}")
                 return
 
-        while not self._stop:
+        while True:
             try:
                 chunk = self.audio_queue.get(timeout=1.0)
             except queue.Empty:
+                if self._stop:
+                    break
                 continue
 
             # Sentinel value signals shutdown
             if chunk is None:
-                break
-
-            # Exit immediately if stop was requested while waiting
-            if self._stop:
                 break
 
             try:
@@ -80,18 +78,13 @@ class TranscriberWorker(QThread):
                 self.error_occurred.emit(f"Transcription error: {e}")
 
     def stop(self):
-        """Signal the worker to stop."""
-        logger.info("Transcriber worker stopping")
+        """Signal the worker to stop after processing remaining chunks."""
+        logger.info("Transcriber worker stopping — draining queue")
         self._stop = True
-        # Drain remaining chunks so worker doesn't process them
-        while not self.audio_queue.empty():
-            try:
-                self.audio_queue.get_nowait()
-            except queue.Empty:
-                break
-        # Push sentinel to unblock the queue.get()
+        # Push sentinel so worker exits after processing remaining chunks
         try:
             self.audio_queue.put_nowait(None)
         except queue.Full:
+            # Queue is full of real chunks; worker will exit via _stop flag
             pass
-        self.wait(10000)
+        self.wait(30000)
