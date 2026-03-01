@@ -30,3 +30,11 @@ bite-size-notes = "bite_size_notes.app:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/bite_size_notes"]
+
+[[tool.uv.index]]
+name = "llama-cpp-python-cpu"
+url = "https://abetlen.github.io/llama-cpp-python/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+llama-cpp-python = { index = "llama-cpp-python-cpu" }

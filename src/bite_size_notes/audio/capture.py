@@ -143,50 +143,15 @@ class AudioCaptureThread(threading.Thread):
             if not should_flush:
                 continue
 
-            elapsed = now - chunk_start
-            timestamp = now - self._start_time
-
-            # Flush mic buffer
-            with self._mic_lock:
-                if self._mic_buffer:
-                    mic_data = np.concatenate(self._mic_buffer)
-                    self._mic_buffer.clear()
-                else:
-                    mic_data = None
-
-            # Flush loopback buffer
-            with self._loopback_lock:
-                if self._loopback_buffer:
-                    loopback_data = np.concatenate(self._loopback_buffer)
-                    self._loopback_buffer.clear()
-                else:
-                    loopback_data = None
-
-            # Push chunks to queue
-            if mic_data is not None and len(mic_data) > self.SAMPLE_RATE:
-                logger.debug("Flushing mic chunk (%.1fs audio)", len(mic_data) / self.SAMPLE_RATE)
-                self._safe_put(
-                    AudioChunk(
-                        data=mic_data,
-                        source="mic",
-                        timestamp=max(0, timestamp - elapsed),
-                    )
-                )
-
-            if loopback_data is not None and len(loopback_data) > self.SAMPLE_RATE:
-                logger.debug("Flushing loopback chunk (%.1fs audio)", len(loopback_data) / self.SAMPLE_RATE)
-                self._safe_put(
-                    AudioChunk(
-                        data=loopback_data,
-                        source="loopback",
-                        timestamp=max(0, timestamp - elapsed),
-                    )
-                )
+            self._flush_buffers(chunk_start)
 
             # Reset state
             had_speech = False
             silence_start = None
-            chunk_start = now
+            chunk_start = time.monotonic()
+
+        # Final flush: push any remaining buffered audio before closing streams
+        self._flush_buffers(chunk_start)
 
         # Cleanup
         for s in streams:
@@ -270,6 +235,49 @@ class AudioCaptureThread(threading.Thread):
 
         t = threading.Thread(target=wasapi_thread, daemon=True)
         t.start()
+
+    def _flush_buffers(self, chunk_start: float):
+        """Flush mic and loopback buffers to the audio queue."""
+        now = time.monotonic()
+        elapsed = now - chunk_start
+        timestamp = now - self._start_time
+
+        # Flush mic buffer
+        with self._mic_lock:
+            if self._mic_buffer:
+                mic_data = np.concatenate(self._mic_buffer)
+                self._mic_buffer.clear()
+            else:
+                mic_data = None
+
+        # Flush loopback buffer
+        with self._loopback_lock:
+            if self._loopback_buffer:
+                loopback_data = np.concatenate(self._loopback_buffer)
+                self._loopback_buffer.clear()
+            else:
+                loopback_data = None
+
+        # Push chunks to queue
+        if mic_data is not None and len(mic_data) > self.SAMPLE_RATE:
+            logger.debug("Flushing mic chunk (%.1fs audio)", len(mic_data) / self.SAMPLE_RATE)
+            self._safe_put(
+                AudioChunk(
+                    data=mic_data,
+                    source="mic",
+                    timestamp=max(0, timestamp - elapsed),
+                )
+            )
+
+        if loopback_data is not None and len(loopback_data) > self.SAMPLE_RATE:
+            logger.debug("Flushing loopback chunk (%.1fs audio)", len(loopback_data) / self.SAMPLE_RATE)
+            self._safe_put(
+                AudioChunk(
+                    data=loopback_data,
+                    source="loopback",
+                    timestamp=max(0, timestamp - elapsed),
+                )
+            )
 
     def _safe_put(self, chunk: AudioChunk):
         """Put a chunk in the queue, dropping oldest if full."""
