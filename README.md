@@ -44,6 +44,17 @@ Open **Settings** (`Ctrl+,`) to configure:
 - **Language** — English, Spanish, French, German, Chinese, Japanese, Korean, Portuguese, or auto-detect
 - **Chunk duration** — how many seconds of audio to buffer before transcribing (3–30s)
 
+## Building
+
+```bash
+# Build a standalone exe (requires dev dependencies)
+uv sync --extra dev
+uv run python build_exe.py
+
+# Build a debug exe (console stays open on crash for troubleshooting)
+uv run python build_exe.py --debug
+```
+
 ## Development
 
 ```bash
