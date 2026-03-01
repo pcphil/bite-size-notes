@@ -1,15 +1,14 @@
-"""Qwen3 4B GGUF summarization engine."""
+"""Qwen2.5 3B Instruct GGUF summarization engine."""
 
 import logging
-import re
 
 from huggingface_hub import hf_hub_download, try_to_load_from_cache
 from llama_cpp import Llama
 
 logger = logging.getLogger(__name__)
 
-REPO_ID = "unsloth/Qwen3-4B-GGUF"
-FILENAME = "Qwen3-4B-Q4_K_M.gguf"
+REPO_ID = "Qwen/Qwen2.5-3B-Instruct-GGUF"
+FILENAME = "qwen2.5-3b-instruct-q4_k_m.gguf"
 
 SYSTEM_PROMPT = (
     "You are a professional meeting-minutes writer. "
@@ -52,10 +51,10 @@ def download_summarizer_sync() -> str:
 
 
 def load_summarizer() -> Llama:
-    """Load the Qwen3 4B GGUF model, downloading if necessary."""
+    """Load the Qwen2.5 3B Instruct GGUF model, downloading if necessary."""
     path = download_summarizer_sync()
     logger.info("Loading Llama model from %s", path)
-    llm = Llama(model_path=path, n_ctx=2048, verbose=False)
+    llm = Llama(model_path=path, n_ctx=2048, verbose=False, chat_format="chatml")
     logger.info("Llama model loaded")
     return llm
 
@@ -66,12 +65,12 @@ def summarize(llm: Llama, transcript_text: str) -> str:
     response = llm.create_chat_completion(
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": transcript_text + "\n/no_think"},
+            {"role": "user", "content": transcript_text},
         ],
         max_tokens=512,
         temperature=0.7,
     )
     content = response["choices"][0]["message"]["content"]
-    content = re.sub(r"<think>[\s\S]*?</think>", "", content).strip()
+    content = content.strip()
     logger.info("Summarization response received")
     return content

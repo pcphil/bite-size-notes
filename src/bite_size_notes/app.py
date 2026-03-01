@@ -61,6 +61,13 @@ def _setup_logging():
 
 
 def main():
+    # In PyInstaller windowed mode (console=False), sys.stdout/stderr are None.
+    # Redirect to devnull so StreamHandlers (ours + third-party) don't crash.
+    if sys.stdout is None:
+        sys.stdout = open(os.devnull, "w")
+    if sys.stderr is None:
+        sys.stderr = open(os.devnull, "w")
+
     _setup_logging()
     try:
         _main_inner()

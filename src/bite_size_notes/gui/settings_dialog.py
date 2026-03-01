@@ -1,5 +1,7 @@
 """Settings dialog for device and model configuration."""
 
+import logging
+
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtWidgets import (
     QComboBox,
@@ -167,7 +169,7 @@ class SettingsDialog(QDialog):
         self._summ_download_btn = QPushButton("Download Model")
         self._summ_download_btn.clicked.connect(self._start_summarizer_download)
         summ_dl_row.addWidget(self._summ_download_btn)
-        summ_layout.addRow("Qwen3 4B:", summ_dl_row)
+        summ_layout.addRow("Qwen2.5 3B:", summ_dl_row)
 
         summ_group.setLayout(summ_layout)
         layout.addWidget(summ_group)
@@ -246,9 +248,12 @@ class SettingsDialog(QDialog):
         self._update_summarizer_status()
 
     def _on_summarizer_dl_error(self, message: str):
+        logger = logging.getLogger(__name__)
+        logger.error("Summarizer model download failed: %s", message)
         p = get_palette(self.config.theme)
         self._summarizer_dl_thread = None
-        self._summ_status.setText("Download failed")
+        self._summ_status.setText(f"Download failed: {message}")
+        self._summ_status.setWordWrap(True)
         self._summ_status.setStyleSheet(f"color: {p['status_red']}; font-weight: bold;")
         self._summ_download_btn.setEnabled(True)
 
