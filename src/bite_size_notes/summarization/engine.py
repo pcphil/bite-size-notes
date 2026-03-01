@@ -54,7 +54,7 @@ def load_summarizer() -> Llama:
     """Load the Qwen2.5 3B Instruct GGUF model, downloading if necessary."""
     path = download_summarizer_sync()
     logger.info("Loading Llama model from %s", path)
-    llm = Llama(model_path=path, n_ctx=2048, verbose=False, chat_format="chatml")
+    llm = Llama(model_path=path, verbose=False, chat_format="chatml")
     logger.info("Llama model loaded")
     return llm
 
