@@ -1,7 +1,11 @@
 """Whisper transcription engine using faster-whisper."""
 
+import logging
+
 import numpy as np
 from faster_whisper import WhisperModel
+
+logger = logging.getLogger(__name__)
 
 
 class TranscriptionEngine:
@@ -15,11 +19,13 @@ class TranscriptionEngine:
         language: str = "en",
     ):
         self.language = language
+        logger.info("Loading Whisper model '%s' (device=%s)", model_size, device)
         self.model = WhisperModel(
             model_size,
             device=device,
             compute_type=compute_type,
         )
+        logger.info("Whisper model '%s' loaded", model_size)
 
     def transcribe(self, audio: np.ndarray) -> list[dict]:
         """Transcribe a numpy audio array (float32, 16kHz, mono).

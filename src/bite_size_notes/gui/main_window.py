@@ -1,5 +1,6 @@
 """Main application window."""
 
+import logging
 import queue
 import time
 
@@ -37,6 +38,8 @@ from bite_size_notes.transcription.model_utils import is_model_cached
 from bite_size_notes.transcription.worker import TranscriberWorker
 from bite_size_notes.utils.config import AppConfig
 from bite_size_notes.utils.platform import is_macos
+
+logger = logging.getLogger(__name__)
 
 
 class _ModelPreloadThread(QThread):
@@ -244,6 +247,7 @@ class MainWindow(QMainWindow):
             self._start_recording()
 
     def _start_recording(self):
+        logger.info("Recording start requested")
         # Check model readiness
         if self._preloaded_engine is None:
             if self._preload_thread is not None:
@@ -337,6 +341,7 @@ class MainWindow(QMainWindow):
         self.ui_timer.start()
 
     def _stop_recording(self):
+        logger.info("Recording stopping")
         self.ui_timer.stop()
 
         if self.capture_thread is not None:
@@ -391,6 +396,7 @@ class MainWindow(QMainWindow):
 
     def _on_bite_size_clicked(self):
         """Handle the Bite Size It button click."""
+        logger.info("Summarize requested")
         if not is_summarizer_cached():
             QMessageBox.warning(
                 self,
@@ -421,6 +427,7 @@ class MainWindow(QMainWindow):
         self._summarize_thread.start()
 
     def _on_summarize_finished(self, result: str):
+        logger.info("Summarization finished")
         self._summarize_thread = None
         self.output_panel.set_text(result)
         self.transcript_session.summary = result
@@ -428,6 +435,7 @@ class MainWindow(QMainWindow):
             self.session_store.save_session(self.transcript_session)
 
     def _on_summarize_error(self, message: str):
+        logger.error("Summarization failed: %s", message)
         self._summarize_thread = None
         self.output_panel.set_text(f"Summarization failed: {message}")
 
@@ -443,6 +451,7 @@ class MainWindow(QMainWindow):
 
     def _on_session_selected(self, session_id: str):
         """Load a previously-saved session into the transcript view."""
+        logger.info("Loading session %s", session_id)
         if self.is_recording:
             return
         try:

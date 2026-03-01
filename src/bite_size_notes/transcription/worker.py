@@ -1,10 +1,13 @@
 """Transcription worker thread using Qt signals."""
 
+import logging
 import queue
 
 from PySide6.QtCore import QThread, Signal
 
 from bite_size_notes.transcription.engine import TranscriptionEngine
+
+logger = logging.getLogger(__name__)
 
 
 class TranscriberWorker(QThread):
@@ -33,6 +36,7 @@ class TranscriberWorker(QThread):
         self._stop = False
 
     def run(self):
+        logger.info("Transcriber worker starting")
         if self._engine is not None:
             engine = self._engine
             self.model_loaded.emit()
@@ -65,16 +69,19 @@ class TranscriberWorker(QThread):
                 segments = engine.transcribe(chunk.data)
                 for seg in segments:
                     speaker = "Me" if chunk.source == "mic" else "Others"
+                    logger.debug("Transcribed [%s]: %s", speaker, seg["text"][:80])
                     self.transcription_ready.emit(
                         speaker,
                         chunk.timestamp + seg["start"],
                         seg["text"],
                     )
             except Exception as e:
+                logger.error("Transcription error: %s", e)
                 self.error_occurred.emit(f"Transcription error: {e}")
 
     def stop(self):
         """Signal the worker to stop."""
+        logger.info("Transcriber worker stopping")
         self._stop = True
         # Drain remaining chunks so worker doesn't process them
         while not self.audio_queue.empty():

@@ -1,5 +1,6 @@
 """Application entry point."""
 
+import logging
 import os
 import sys
 from pathlib import Path
@@ -43,7 +44,24 @@ def _main_inner():
     sys.exit(app.exec())
 
 
+def _setup_logging():
+    """Configure logging to app.log and stderr."""
+    log_dir = Path(os.environ.get("APPDATA", Path.home())) / "Bite-Size Notes"
+    log_dir.mkdir(exist_ok=True)
+    log_file = log_dir / "app.log"
+
+    fmt = "%(asctime)s %(name)s %(levelname)s %(message)s"
+    file_handler = logging.FileHandler(log_file, encoding="utf-8")
+    file_handler.setFormatter(logging.Formatter(fmt))
+
+    stderr_handler = logging.StreamHandler()
+    stderr_handler.setFormatter(logging.Formatter(fmt))
+
+    logging.basicConfig(level=logging.INFO, handlers=[file_handler, stderr_handler])
+
+
 def main():
+    _setup_logging()
     try:
         _main_inner()
     except Exception:
